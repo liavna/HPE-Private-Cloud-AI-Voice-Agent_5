@@ -3084,6 +3084,7 @@ async def stream_tts_for_sentence(websocket, text_to_synthesize, stream_start_ti
 # =============================================================================
 LANGUAGE_INSTRUCTIONS = {
     "en": "LANGUAGE: You MUST respond ONLY in English. Even if the user speaks Hebrew, Arabic, or another language - understand them but ALWAYS reply in natural, conversational English. Never use non-English numbers or terms.",
+    "he": "LANGUAGE: You MUST respond ONLY in Hebrew. Even if the user speaks English or another language - understand them but ALWAYS reply in natural, conversational Hebrew. Never use English numbers or terms.",
     "es": "IDIOMA: DEBES responder SOLAMENTE en español. Aunque el usuario hable otro idioma, entiéndelo pero SIEMPRE responde en español natural y conversacional. No uses palabras en inglés.",
     "fr": "LANGUE: Tu DOIS répondre UNIQUEMENT en français. Même si l'utilisateur parle une autre langue, comprends-le mais réponds TOUJOURS en français naturel et conversationnel. N'utilise pas de mots anglais.",
     "de": "SPRACHE: Du MUSST ausschließlich auf Deutsch antworten. Auch wenn der Benutzer eine andere Sprache spricht, verstehe ihn aber antworte IMMER in natürlichem Deutsch. Keine englischen Wörter.",
