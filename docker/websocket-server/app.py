@@ -1,6 +1,11 @@
 # FILE: docker/websocket_server/app.py
-# Version: 4.1.0 - Major Stability & Performance Update
-# Changes v4.1.0:
+# Version: 5.0.0 - Enhanced Multi-Language & Sentiment Analysis
+# Changes v5.0.0:
+#   - Full multi-language support (Hebrew, Spanish, French, etc.)
+#   - Expanded sentiment analysis and churn detection
+#   - Session stability fixes (collision prevention)
+#   - Native language database responses
+# Previous (v4.1.0):
 #   - Circuit Breaker pattern for ASR/TTS/LLM services
 #   - TTS response caching for common phrases
 #   - Connection watchdog monitoring
@@ -9,8 +14,6 @@
 #   - Health check endpoint for service monitoring
 #   - LOCALE_MAP moved to global constant (performance)
 #   - Enhanced error handling and recovery
-# Previous (v3.0.0):
-#   - Multi-language support (responses match TTS language setting)
 #   - Completely redesigned conversation prompts for natural speech
 #   - New upgrade request flow with full database tracking
 #   - Intelligent multi-state conversation handling
@@ -508,6 +511,11 @@ NEGATIVE_SENTIMENT_KEYWORDS = {
         'dhokha', 'scam', 'faltu', 'samay ki barbadi', 'thak gaya',
         'sharm', 'kabhi nahi', 'kharab', 'dheema', 'gandi service',
         'kaam nahi kar raha', 'chhod raha hu', 'band karo',
+        # Devanagari
+        'गुस्सा', 'नाराज़', 'निराश', 'बेकार', 'सबसे बुरा', 'नफरत',
+        'रद्द', 'वापस', 'शिकायत', 'मैनेजर', 'वकील', 'धोखा', 'घोटाला',
+        'फालतू', 'समय की बर्बादी', 'थक गया', 'शर्म', 'कभी नहीं',
+        'खराब', 'धीमा', 'गंदी सर्विस', 'काम नहीं कर रहा', 'छोड़ रहा हूं', 'बंद करो'
     ]
 }
 
@@ -585,6 +593,30 @@ CHURN_INDICATORS = {
         'contract beëindigen', 'uitschrijven', 'account verwijderen', 'te duur',
         'beter gevonden', 'goedkoper', 'niet waard', 'geldverspilling'
     ],
+    'zh': [
+        '取消订阅', '关闭账户', '切换到', '寻找其他', '受够了',
+        '最后机会', '最后警告', '取消计划', '停止服务', '终止合同',
+        '退订', '删除账户', '太贵', '找到更好的', '更便宜', '不值得', '浪费钱'
+    ],
+    'ja': [
+        'サブスクリプションをキャンセル', 'アカウントを閉鎖', 'に切り替える', '他を探す',
+        'もう十分', '最後のチャンス', '最後の警告', 'プランをキャンセル', 'サービスを停止',
+        '契約を終了', '退会', 'アカウントを削除', '高すぎる', 'もっと良いものを見つけた',
+        '安い', '価値がない', '金の無駄'
+    ],
+    'ko': [
+        '구독 취소', '계정 폐쇄', '로 전환', '다른 곳을 찾다',
+        '충분해', '마지막 기회', '마지막 경고', '플랜 취소', '서비스 중단',
+        '계약 종료', '구독 해지', '계정 삭제', '너무 비싸다', '더 좋은 것을 찾았다',
+        '더 싼', '가치가 없다', '돈 낭비'
+    ],
+    'hi': [
+        'sadasyata radd', 'khata band', 'switch', 'khatam',
+        'mehenga', 'bekaar', 'barbaad', 'band karo',
+        # Devanagari
+        'सदस्यता रद्द', 'खाता बंद', 'स्विच', 'खत्म',
+        'महंगा', 'बेकार', 'बरबाद', 'बंद करो'
+    ],
 }
 
 # =============================================================================
@@ -632,248 +664,352 @@ _watchdog = ConnectionWatchdog()
 # =============================================================================
 NATURAL_RESPONSES = {
     "en": {
-        "greeting_new": [
-            "Hey there! Welcome to our service. I'll need to verify your account real quick - could you tell me your four digit PIN?",
-            "Hi! Thanks for calling. Before we get started, I just need your four digit PIN to pull up your account.",
-            "Hello! Great to hear from you. For security, could you share your four digit PIN with me?",
-        ],
-        "greeting_returning": [
-            "Hey {name}! Good to have you back. What can I do for you today?",
-            "Hi {name}! How's it going? What brings you in today?",
-            "{name}! Nice to hear from you again. How can I help?",
-        ],
-        "pin_invalid": [
-            "Hmm, that PIN didn't match what I have on file. You've got {remaining} more tries - want to give it another shot?",
-            "That one didn't work, I'm afraid. {remaining} attempts left. Go ahead and try again.",
-        ],
-        "pin_unclear": [
-            "Sorry, I didn't quite catch that. Could you say your four digit PIN again for me?",
-            "I missed that - could you repeat your PIN? Just the four digits.",
-        ],
-        "pin_locked": [
-            "I'm really sorry, but we've hit the limit on PIN attempts. You'll need to contact our support team directly.",
-        ],
-        "upgrade_ask_plan": [
-            "Sure thing! So you're thinking about upgrading. We've got a few options. Are you looking at Standard or Premium?",
-            "Absolutely! What are you thinking - Standard upgrade or Premium?",
-        ],
-        "upgrade_confirm": [
-            "Perfect, so you want to upgrade to {plan}. Just to confirm - should I put in a request to switch you to {plan}?",
-            "Got it - {plan} it is! Can you confirm that's the plan you want?",
-        ],
-        "upgrade_submitted": [
-            "Done! I've submitted your upgrade request for {plan}. One of our team members will call you shortly to finalize everything.",
-            "Perfect, your {plan} upgrade request is in. Expect a call from us soon to complete the process.",
-        ],
-        "upgrade_cancelled": [
-            "No problem at all! Let me know if you change your mind.",
-            "Got it - no changes for now. Anything else I can help with?",
-        ],
-        "info_not_found": [
-            "Hmm, I couldn't find any {type} information on your account. Want me to check something else?",
-        ],
-        "query_error": [
-            "Oh, I ran into a little snag looking that up. Mind if we try again?",
-        ],
-        "goodbye": [
-            "Take care! Don't hesitate to call if you need anything.",
-            "Thanks for calling! Have a great day!",
-        ],
-        "ticket_ask_details": [
-            "Sure, I can open a ticket for you. Why do you want to open a ticket? Please describe the issue.",
-            "I can help with that. What is the reason for the ticket?",
-            "No problem. Please tell me why you need a ticket so I can note it down.",
-        ],
-        "ticket_created": [
-            "I've opened that ticket for you. Your ticket number is {id}. Our team will look into it shortly.",
-            "Done. Ticket #{id} has been created. We'll get back to you as soon as possible.",
-        ],
+        "greeting_new": ["Hey there! Welcome. Could you tell me your four digit PIN to verify your account?", "Hi! Thanks for calling. I just need your four digit PIN to pull up your account.", "Hello! For security, could you share your four digit PIN with me?"],
+        "greeting_returning": ["Hey {name}! Good to have you back. What can I do for you today?", "Hi {name}! How's it going? What brings you in today?", "{name}! Nice to hear from you again. How can I help?"],
+        "pin_invalid": ["Hmm, that PIN didn't match. You've got {remaining} more tries.", "That one didn't work. {remaining} attempts left. Try again?"],
+        "pin_unclear": ["Sorry, I didn't quite catch that. Could you say your four digit PIN again?", "I missed that - could you repeat your PIN?"],
+        "pin_locked": ["I'm sorry, you've hit the limit on PIN attempts. Please contact support."],
+        "upgrade_ask_plan": ["Sure thing! Are you looking at Standard or Premium?", "Absolutely! Thinking about Standard or Premium?"],
+        "upgrade_confirm": ["Perfect, upgrade to {plan}. Should I submit that request?", "Got it - {plan}. Confirm the upgrade?"],
+        "upgrade_submitted": ["Done! I've submitted your upgrade request for {plan}.", "Perfect, your {plan} upgrade request is in."],
+        "upgrade_cancelled": ["No problem! Let me know if you change your mind.", "Got it - no changes for now."],
+        "info_not_found": ["I couldn't find any {type} information on your account.", "No {type} found."],
+        "query_error": ["I ran into a snag looking that up. Mind if we try again?", "System hiccup. Try again?"],
+        "goodbye": ["Take care! Don't hesitate to call if you need anything.", "Thanks for calling! Have a great day!"],
+        "ticket_ask_details": ["Sure, I can open a ticket. Please describe the issue.", "I can help with that. What is the reason for the ticket?"],
+        "ticket_created": ["I've opened ticket number {id} for you.", "Done. Ticket #{id} has been created."],
+        "sub_active": ["You're on the {plan} plan, {name}. That's {price} dollars a month."],
+        "sub_status": ["Your {plan} subscription is currently {status}."],
+        "bal_overdue": ["Looks like you have {amount} dollars overdue, {name}. Want help sorting that?"],
+        "bal_pending": ["You've got {amount} dollars pending, {name}. Nothing overdue."],
+        "bal_clear": ["Good news, {name}! Your balance is clear."],
+        "invoice_one": ["You've got one invoice for {amount} dollars, and it's {status}."],
+        "invoice_many": ["I see {count} invoices. Your most recent is {amount} dollars, currently {status}."],
+        "plan_details": ["You're on {name} at {price} dollars a month. You've got {data} gigs of data."],
+        "ticket_open": ["You have {count} open tickets. The most recent is about {subject}."],
+        "ticket_resolved": ["All your {count} support tickets have been resolved!"],
+        "ticket_none": ["You don't have any support tickets."],
+        "cust_info": ["Your account email is {email} and phone is {phone}."],
+        "general_found": ["Here's what I found for you."],
     },
     "es": {
-        "greeting_new": [
-            "¡Hola! Bienvenido a nuestro servicio. Necesito verificar tu cuenta - ¿podrías decirme tu PIN de cuatro dígitos?",
-        ],
-        "greeting_returning": [
-            "¡Hola {name}! Qué bueno tenerte de vuelta. ¿En qué puedo ayudarte hoy?",
-        ],
-        "pin_invalid": [
-            "Ese PIN no coincide. Te quedan {remaining} intentos más. ¿Quieres intentar de nuevo?",
-        ],
-        "pin_unclear": [
-            "Perdona, no escuché bien. ¿Podrías repetir tu PIN de cuatro dígitos?",
-        ],
-        "pin_locked": [
-            "Lo siento, has alcanzado el límite de intentos. Necesitarás contactar a nuestro equipo de soporte.",
-        ],
-        "upgrade_ask_plan": [
-            "¡Claro! ¿Estás pensando en Standard o Premium?",
-        ],
-        "upgrade_confirm": [
-            "Perfecto, quieres actualizar a {plan}. ¿Confirmas que quieres cambiar a {plan}?",
-        ],
-        "upgrade_submitted": [
-            "¡Listo! He enviado tu solicitud de actualización a {plan}. Un representante te llamará pronto.",
-        ],
-        "upgrade_cancelled": [
-            "¡Sin problema! Avísame si cambias de opinión.",
-        ],
-        "info_not_found": [
-            "No encontré información de {type} en tu cuenta. ¿Quieres que busque otra cosa?",
-        ],
-        "query_error": [
-            "Tuve un pequeño problema buscando eso. ¿Intentamos de nuevo?",
-        ],
-        "goodbye": [
-            "¡Cuídate! No dudes en llamar si necesitas algo.",
-        ],
-        "ticket_ask_details": [
-            "Claro, puedo abrir un ticket. ¿Por qué quieres abrir un ticket? Por favor describe el problema.",
-            "Puedo ayudarte con eso. ¿Cuál es la razón del ticket?",
-        ],
-        "ticket_created": [
-            "He abierto el ticket. El número es {id}. Nuestro equipo lo revisará pronto.",
-            "Listo. Ticket #{id} creado correctamente.",
-        ],
+        "greeting_new": ["¡Hola! Bienvenido. ¿Podrías decirme tu PIN de cuatro dígitos?", "¡Hola! Necesito tu PIN de cuatro dígitos para verificar tu cuenta."],
+        "greeting_returning": ["¡Hola {name}! Qué bueno tenerte de vuelta. ¿En qué puedo ayudarte?", "¡{name}! Un gusto escucharte de nuevo."],
+        "pin_invalid": ["Ese PIN no coincide. Te quedan {remaining} intentos.", "No funcionó. {remaining} intentos restantes."],
+        "pin_unclear": ["Perdona, no escuché bien. ¿Podrías repetir tu PIN?", "¿Puedes repetir los cuatro dígitos?"],
+        "pin_locked": ["Lo siento, has alcanzado el límite de intentos. Contacta soporte."],
+        "upgrade_ask_plan": ["¡Claro! ¿Buscas el plan Standard o Premium?", "¿Te interesa Standard o Premium?"],
+        "upgrade_confirm": ["Perfecto, cambiar a {plan}. ¿Confirmo la solicitud?", "¿Quieres proceder con el plan {plan}?"],
+        "upgrade_submitted": ["¡Listo! Envié tu solicitud para {plan}.", "Hecho. Solicitud de {plan} enviada."],
+        "upgrade_cancelled": ["¡Sin problema! Avísame si cambias de opinión.", "Cancelado. ¿Algo más?"],
+        "info_not_found": ["No encontré información de {type}.", "Sin datos de {type}."],
+        "query_error": ["Tuve un problema buscando eso. ¿Intentamos de nuevo?", "Error de sistema. ¿Pruebas otra vez?"],
+        "goodbye": ["¡Cuídate! Llama si necesitas algo.", "¡Gracias por llamar! Que tengas buen día."],
+        "ticket_ask_details": ["Puedo abrir un ticket. Describe el problema, por favor.", "¿Cuál es la razón del ticket?"],
+        "ticket_created": ["Abrí el ticket número {id} para ti.", "Listo. Ticket #{id} creado."],
+        "sub_active": ["Estás en el plan {plan}, {name}. Son {price} dólares al mes."],
+        "sub_status": ["Tu suscripción {plan} está actualmente {status}."],
+        "bal_overdue": ["Tienes {amount} dólares vencidos, {name}. ¿Quieres ayuda con eso?"],
+        "bal_pending": ["Tienes {amount} dólares pendientes, {name}. Nada vencido."],
+        "bal_clear": ["¡Buenas noticias, {name}! Tu saldo está al día."],
+        "invoice_one": ["Tienes una factura de {amount} dólares, y está {status}."],
+        "invoice_many": ["Veo {count} facturas. La más reciente es de {amount} dólares, {status}."],
+        "plan_details": ["Tienes {name} por {price} dólares al mes. Incluye {data} gigas."],
+        "ticket_open": ["Tienes {count} tickets abiertos. El más reciente es sobre {subject}."],
+        "ticket_resolved": ["¡Tus {count} tickets están resueltos!"],
+        "ticket_none": ["No tienes tickets de soporte."],
+        "cust_info": ["Tu email es {email} y teléfono {phone}."],
+        "general_found": ["Esto es lo que encontré."],
     },
     "fr": {
-        "greeting_new": [
-            "Bonjour! Bienvenue. J'ai besoin de vérifier votre compte - pouvez-vous me donner votre code PIN à quatre chiffres?",
-        ],
-        "greeting_returning": [
-            "Bonjour {name}! Content de vous revoir. Comment puis-je vous aider aujourd'hui?",
-        ],
-        "pin_invalid": [
-            "Ce code ne correspond pas. Il vous reste {remaining} essais. Voulez-vous réessayer?",
-        ],
-        "pin_unclear": [
-            "Désolé, je n'ai pas bien entendu. Pouvez-vous répéter votre code PIN?",
-        ],
-        "pin_locked": [
-            "Désolé, vous avez atteint la limite d'essais. Veuillez contacter notre équipe de support.",
-        ],
-        "upgrade_ask_plan": [
-            "Bien sûr! Vous pensez à Standard ou Premium?",
-        ],
-        "upgrade_confirm": [
-            "Parfait, vous voulez passer à {plan}. Je confirme la demande de {plan}?",
-        ],
-        "upgrade_submitted": [
-            "C'est fait! J'ai soumis votre demande de mise à niveau vers {plan}. Un représentant vous contactera bientôt.",
-        ],
-        "upgrade_cancelled": [
-            "Pas de problème! Dites-moi si vous changez d'avis.",
-        ],
-        "info_not_found": [
-            "Je n'ai pas trouvé d'informations sur {type}. Voulez-vous que je cherche autre chose?",
-        ],
-        "query_error": [
-            "J'ai eu un petit problème. On réessaie?",
-        ],
-        "goodbye": [
-            "Prenez soin de vous! N'hésitez pas à rappeler.",
-        ],
-        "ticket_ask_details": [
-            "Bien sûr, je peux ouvrir un ticket. Pourquoi voulez-vous ouvrir un ticket ? Veuillez décrire le problème.",
-            "Je peux vous aider. Quelle est la raison du ticket ?",
-        ],
-        "ticket_created": [
-            "J'ai ouvert le ticket pour vous. Votre numéro est {id}.",
-            "C'est fait. Le ticket #{id} a été créé.",
-        ],
+        "greeting_new": ["Bonjour! Pouvez-vous me donner votre code PIN à quatre chiffres?", "Bienvenue. J'ai besoin de votre PIN pour accéder à votre compte."],
+        "greeting_returning": ["Bonjour {name}! Comment puis-je vous aider?", "Ravi de vous revoir, {name}!"],
+        "pin_invalid": ["Ce code ne correspond pas. Il reste {remaining} essais.", "Incorrect. {remaining} tentatives restantes."],
+        "pin_unclear": ["Désolé, je n'ai pas compris. Pouvez-vous répéter?", "Répétez le PIN s'il vous plaît."],
+        "pin_locked": ["Désolé, limite d'essais atteinte. Contactez le support."],
+        "upgrade_ask_plan": ["Bien sûr! Vous voulez Standard ou Premium?", "Standard ou Premium vous intéresse?"],
+        "upgrade_confirm": ["Parfait, passer à {plan}. Je confirme?", "Vous voulez le plan {plan}. On y va?"],
+        "upgrade_submitted": ["C'est fait! Demande pour {plan} envoyée.", "Noté. Mise à niveau vers {plan} soumise."],
+        "upgrade_cancelled": ["Pas de problème! Dites-moi si vous changez d'avis.", "Annulé."],
+        "info_not_found": ["Je n'ai pas trouvé d'infos sur {type}.", "Aucun {type} trouvé."],
+        "query_error": ["Petit problème technique. On réessaie?", "Erreur système."],
+        "goodbye": ["Au revoir! N'hésitez pas à rappeler.", "Bonne journée!"],
+        "ticket_ask_details": ["Je peux ouvrir un ticket. Décrivez le problème.", "Quel est le souci pour le ticket?"],
+        "ticket_created": ["J'ai ouvert le ticket numéro {id}.", "Ticket #{id} créé avec succès."],
+        "sub_active": ["Vous avez le plan {plan}, {name}. C'est {price} dollars par mois."],
+        "sub_status": ["Votre abonnement {plan} est {status}."],
+        "bal_overdue": ["Vous avez {amount} dollars en retard, {name}. Besoin d'aide?", "Attention, {amount} dollars impayés."],
+        "bal_pending": ["Vous avez {amount} dollars en attente, {name}.", "Solde en attente : {amount} dollars."],
+        "bal_clear": ["Bonne nouvelle, {name}! Tout est payé.", "Votre compte est à jour."],
+        "invoice_one": ["Une facture de {amount} dollars, statut {status}."],
+        "invoice_many": ["Je vois {count} factures. La dernière est de {amount} dollars, {status}."],
+        "plan_details": ["Forfait {name} à {price} dollars. {data} gigas de données."],
+        "ticket_open": ["Vous avez {count} tickets ouverts. Le dernier concerne {subject}."],
+        "ticket_resolved": ["Vos {count} tickets sont tous résolus!", "Aucun ticket ouvert."],
+        "ticket_none": ["Aucun ticket de support."],
+        "cust_info": ["Email : {email}, Tél : {phone}."],
+        "general_found": ["Voici ce que j'ai trouvé."],
     },
     "de": {
-        "greeting_new": [
-            "Hallo! Willkommen. Ich muss Ihr Konto verifizieren - können Sie mir Ihre vierstellige PIN sagen?",
-        ],
-        "greeting_returning": [
-            "Hallo {name}! Schön, Sie wiederzuhören. Wie kann ich Ihnen heute helfen?",
-        ],
-        "pin_invalid": [
-            "Diese PIN stimmt nicht. Sie haben noch {remaining} Versuche. Möchten Sie es nochmal versuchen?",
-        ],
-        "pin_unclear": [
-            "Entschuldigung, ich habe das nicht verstanden. Können Sie Ihre PIN wiederholen?",
-        ],
-        "pin_locked": [
-            "Es tut mir leid, Sie haben die maximale Anzahl an Versuchen erreicht. Bitte kontaktieren Sie unseren Support.",
-        ],
-        "upgrade_ask_plan": [
-            "Natürlich! Denken Sie an Standard oder Premium?",
-        ],
-        "upgrade_confirm": [
-            "Perfekt, Sie möchten auf {plan} upgraden. Soll ich die Anfrage für {plan} einreichen?",
-        ],
-        "upgrade_submitted": [
-            "Erledigt! Ich habe Ihre Upgrade-Anfrage für {plan} eingereicht. Ein Mitarbeiter wird Sie bald kontaktieren.",
-        ],
-        "upgrade_cancelled": [
-            "Kein Problem! Sagen Sie Bescheid, wenn Sie es sich anders überlegen.",
-        ],
-        "info_not_found": [
-            "Ich konnte keine {type}-Informationen finden. Soll ich etwas anderes suchen?",
-        ],
-        "query_error": [
-            "Da ist ein kleines Problem aufgetreten. Versuchen wir es nochmal?",
-        ],
-        "goodbye": [
-            "Auf Wiederhören! Rufen Sie gerne wieder an.",
-        ],
-        "ticket_ask_details": [
-            "Sicher, ich kann ein Ticket öffnen. Warum möchten Sie ein Ticket öffnen? Bitte beschreiben Sie das Problem.",
-            "Kein Problem. Was ist der Grund für das Ticket?",
-        ],
-        "ticket_created": [
-            "Ich habe das Ticket für Sie geöffnet. Ihre Ticketnummer ist {id}.",
-            "Erledigt. Ticket #{id} wurde erstellt.",
-        ],
+        "greeting_new": ["Hallo! Können Sie mir Ihre vierstellige PIN nennen?", "Willkommen. Bitte nennen Sie Ihre PIN zur Verifizierung."],
+        "greeting_returning": ["Hallo {name}! Wie kann ich helfen?", "Schön Sie zu hören, {name}."],
+        "pin_invalid": ["PIN falsch. Noch {remaining} Versuche.", "Das war nicht korrekt. {remaining} Versuche übrig."],
+        "pin_unclear": ["Entschuldigung, können Sie die PIN wiederholen?", "Bitte wiederholen Sie die vier Ziffern."],
+        "pin_locked": ["Zu viele Versuche. Bitte kontaktieren Sie den Support."],
+        "upgrade_ask_plan": ["Gerne! Möchten Sie Standard oder Premium?", "Interesse an Standard oder Premium?"],
+        "upgrade_confirm": ["Perfekt, Upgrade auf {plan}. Soll ich das bestätigen?", "Plan {plan} ausgewählt. Bestätigen?"],
+        "upgrade_submitted": ["Erledigt! Anfrage für {plan} gesendet.", "Upgrade auf {plan} eingereicht."],
+        "upgrade_cancelled": ["Kein Problem. Sagen Sie Bescheid bei Änderungen.", "Abgebrochen."],
+        "info_not_found": ["Keine Information zu {type} gefunden.", "Nichts zu {type} gefunden."],
+        "query_error": ["Ein kleiner Fehler. Versuchen wir es nochmal?", "Systemfehler."],
+        "goodbye": ["Auf Wiederhören!", "Tschüss, rufen Sie gerne wieder an."],
+        "ticket_ask_details": ["Ich öffne ein Ticket. Was ist das Problem?", "Bitte beschreiben Sie das Problem für das Ticket."],
+        "ticket_created": ["Ticket Nummer {id} wurde erstellt.", "Erledigt. Ticket #{id} ist offen."],
+        "sub_active": ["Sie haben den {plan} Plan, {name}. {price} Dollar pro Monat.", "Ihr Plan ist {plan} für {price} Dollar."],
+        "sub_status": ["Ihr {plan} Abo ist derzeit {status}."],
+        "bal_overdue": ["Sie haben {amount} Dollar offen, {name}. Soll ich helfen?", "Achtung, {amount} Dollar überfällig."],
+        "bal_pending": ["Es sind {amount} Dollar ausstehend, {name}.", "Offener Betrag: {amount} Dollar."],
+        "bal_clear": ["Gute Nachrichten, {name}! Alles bezahlt.", "Konto ausgeglichen."],
+        "invoice_one": ["Eine Rechnung über {amount} Dollar, Status {status}."],
+        "invoice_many": ["Ich sehe {count} Rechnungen. Die letzte über {amount} Dollar ist {status}."],
+        "plan_details": ["Plan {name} für {price} Dollar. {data} GB Datenvolumen."],
+        "ticket_open": ["Sie haben {count} offene Tickets. Das letzte betrifft {subject}."],
+        "ticket_resolved": ["Alle {count} Tickets sind gelöst.", "Keine offenen Probleme."],
+        "ticket_none": ["Keine Support-Tickets vorhanden."],
+        "cust_info": ["Email: {email}, Telefon: {phone}."],
+        "general_found": ["Das habe ich gefunden."],
     },
     "he": {
-        "greeting_new": [
-            "היי! ברוכים הבאים. אני צריך לאמת את החשבון שלך - תוכל לומר לי את קוד ה-PIN בן ארבע הספרות?",
-        ],
-        "greeting_returning": [
-            "היי {name}! טוב שחזרת. איך אני יכול לעזור לך היום?",
-        ],
-        "pin_invalid": [
-            "הקוד לא תואם. נשארו לך {remaining} ניסיונות. רוצה לנסות שוב?",
-        ],
-        "pin_unclear": [
-            "סליחה, לא שמעתי טוב. תוכל לחזור על הקוד?",
-        ],
-        "pin_locked": [
-            "מצטער, הגעת למגבלת הניסיונות. צריך לפנות לצוות התמיכה.",
-        ],
-        "upgrade_ask_plan": [
-            "בטח! אתם חושבים על סטנדרט או פרימיום?",
-        ],
-        "upgrade_confirm": [
-            "מעולה, אתם רוצים לשדרג ל-{plan}. לאשר את הבקשה?",
-        ],
-        "upgrade_submitted": [
-            "בוצע! הגשתי את בקשת השדרוג ל-{plan}. נציג יחזור אליך בקרוב.",
-        ],
-        "upgrade_cancelled": [
-            "אין בעיה! תודיע לי אם תשנה את דעתך.",
-        ],
-        "info_not_found": [
-            "לא מצאתי מידע על {type}. רוצה שאחפש משהו אחר?",
-        ],
-        "query_error": [
-            "הייתה לי בעיה קטנה בחיפוש. שננסה שוב?",
-        ],
-        "goodbye": [
-            "להתראות! אל תהסס להתקשר אם תצטרך משהו.",
-        ],
-        "ticket_ask_details": [
-            "אין בעיה, אני אפתח לך קריאה. למה אתה רוצה לפתוח קריאה? תאר לי את הבעיה.",
-            "בטח, אני אפתח כרטיס תמיכה. מה הסיבה לפנייה?",
-            "אני יכול לעזור עם זה. ספר לי למה אתה צריך קריאה כדי שאוכל לרשום.",
-        ],
-        "ticket_created": [
-            "פתחתי לך את הקריאה. מספר הקריאה הוא {id}. הצוות שלנו יטפל בזה בהקדם.",
-            "בוצע. קריאה מספר {id} נפתחה בהצלחה. נחזור אליך בקרוב.",
-            "הכל מסודר. פתחתי קריאה מספר {id} עם הפרטים שמסרת.",
-        ],
+        "greeting_new": ["היי! אפשר לקבל את קוד ה-PIN בן 4 הספרות שלך?", "ברוכים הבאים. אני צריך את הקוד הסודי לאימות."],
+        "greeting_returning": ["היי {name}! איזה כיף שחזרת. איך אפשר לעזור?", "שלום {name}! במה אוכל לסייע היום?"],
+        "pin_invalid": ["הקוד לא תואם. נשארו {remaining} ניסיונות.", "זה לא עבד. נותרו {remaining} ניסיונות."],
+        "pin_unclear": ["סליחה, לא שמעתי. אפשר לחזור על הקוד?", "תוכל להגיד שוב את ארבע הספרות?"],
+        "pin_locked": ["מצטער, הגעת למגבלת הניסיונות. פנה לתמיכה.", "החשבון ננעל עקב ריבוי ניסיונות."],
+        "upgrade_ask_plan": ["בטח! חושבים על סטנדרט או פרימיום?", "מעוניינים בחבילת סטנדרט או פרימיום?"],
+        "upgrade_confirm": ["מעולה, לשדרג ל-{plan}. לאשר?", "אז {plan}. להגיש את הבקשה?"],
+        "upgrade_submitted": ["בוצע! הגשתי בקשה ל-{plan}.", "הבקשה לשדרוג ל-{plan} נשלחה בהצלחה."],
+        "upgrade_cancelled": ["אין בעיה. תודיע לי אם תשנה דעה.", "בוטל."],
+        "info_not_found": ["לא מצאתי מידע על {type}.", "אין נתונים על {type}."],
+        "query_error": ["הייתה בעיה קטנה. שננסה שוב?", "שגיאת מערכת."],
+        "goodbye": ["להתראות! תרגיש חופשי להתקשר שוב.", "יום טוב!"],
+        "ticket_ask_details": ["אני אפתח קריאה. מה הבעיה?", "תאר לי את התקלה עבור הכרטיס."],
+        "ticket_created": ["פתחתי קריאה מספר {id}.", "בוצע. כרטיס #{id} נפתח."],
+        "sub_active": ["אתה בתוכנית {plan}, {name}. זה {price} דולר לחודש.", "המנוי שלך הוא {plan} בעלות {price} דולר."],
+        "sub_status": ["המנוי {plan} שלך כרגע בסטטוס {status}."],
+        "bal_overdue": ["יש לך חוב של {amount} דולר, {name}. רוצה עזרה עם זה?", "שים לב, {amount} דולר באיחור."],
+        "bal_pending": ["יש {amount} דולר בהמתנה לתשלום, {name}.", "סכום פתוח: {amount} דולר."],
+        "bal_clear": ["חדשות טובות {name}, אין חובות!", "היתרה מאופסת."],
+        "invoice_one": ["יש חשבונית אחת על סך {amount} דולר, בסטטוס {status}."],
+        "invoice_many": ["אני רואה {count} חשבוניות. האחרונה על {amount} דולר, {status}."],
+        "plan_details": ["חבילת {name} ב-{price} דולר. כולל {data} ג'יגה.", "מנוי {name}, {price} לחודש."],
+        "ticket_open": ["יש לך {count} קריאות פתוחות. האחרונה לגבי {subject}.", "{count} כרטיסים פתוחים."],
+        "ticket_resolved": ["כל {count} הקריאות שלך טופלו!", "אין תקלות פתוחות."],
+        "ticket_none": ["אין לך קריאות שירות במערכת."],
+        "cust_info": ["האימייל הוא {email} והטלפון {phone}."],
+        "general_found": ["הנה מה שמצאתי."],
+    },
+    "it": {
+        "greeting_new": ["Ciao! Potresti dirmi il tuo PIN di quattro cifre?", "Benvenuto. Mi serve il PIN per verificare l'account."],
+        "greeting_returning": ["Ciao {name}! Come posso aiutarti?", "Bentornato {name}!"],
+        "pin_invalid": ["PIN non valido. Hai ancora {remaining} tentativi.", "Sbagliato. {remaining} tentativi rimasti."],
+        "pin_unclear": ["Scusa, non ho capito. Puoi ripetere il PIN?", "Ripeti le quattro cifre per favore."],
+        "pin_locked": ["Spiacente, troppi tentativi. Contatta il supporto."],
+        "upgrade_ask_plan": ["Certo! Preferisci Standard o Premium?", "Vuoi passare a Standard o Premium?"],
+        "upgrade_confirm": ["Perfetto, passo a {plan}. Confermo?", "Vuoi il piano {plan}. Procedo?"],
+        "upgrade_submitted": ["Fatto! Richiesta per {plan} inviata.", "Richiesta di upgrade a {plan} inoltrata."],
+        "upgrade_cancelled": ["Nessun problema. Avvisami se cambi idea.", "Annullato."],
+        "info_not_found": ["Non ho trovato info su {type}.", "Nessun dato per {type}."],
+        "query_error": ["Piccolo problema tecnico. Riprovare?", "Errore di sistema."],
+        "goodbye": ["Arrivederci! Chiama quando vuoi.", "Buona giornata!"],
+        "ticket_ask_details": ["Posso aprire un ticket. Descrivi il problema.", "Qual è il motivo della segnalazione?"],
+        "ticket_created": ["Ho aperto il ticket numero {id}.", "Fatto. Ticket #{id} creato."],
+        "sub_active": ["Hai il piano {plan}, {name}. Costa {price} dollari al mese."],
+        "sub_status": ["Il tuo abbonamento {plan} è {status}."],
+        "bal_overdue": ["Hai {amount} dollari scaduti, {name}. Vuoi aiuto?", "Attenzione, {amount} dollari non pagati."],
+        "bal_pending": ["Hai {amount} dollari in sospeso, {name}."],
+        "bal_clear": ["Ottime notizie, {name}! Saldo a zero.", "Tutto pagato."],
+        "invoice_one": ["Una fattura di {amount} dollari, stato {status}."],
+        "invoice_many": ["Vedo {count} fatture. L'ultima è di {amount} dollari, {status}."],
+        "plan_details": ["Piano {name} a {price} dollari. {data} GB di dati."],
+        "ticket_open": ["Hai {count} ticket aperti. L'ultimo riguarda {subject}."],
+        "ticket_resolved": ["Tutti i tuoi {count} ticket sono risolti!"],
+        "ticket_none": ["Nessun ticket di supporto."],
+        "cust_info": ["Email: {email}, Telefono: {phone}."],
+        "general_found": ["Ecco cosa ho trovato."],
+    },
+    "pt": {
+        "greeting_new": ["Olá! Pode me dizer seu PIN de quatro dígitos?", "Bem-vindo. Preciso do seu PIN para verificar a conta."],
+        "greeting_returning": ["Olá {name}! Como posso ajudar hoje?", "Oi {name}! Tudo bem?"],
+        "pin_invalid": ["PIN incorreto. Restam {remaining} tentativas.", "Não conferiu. {remaining} chances."],
+        "pin_unclear": ["Desculpe, não entendi. Pode repetir o PIN?", "Repita os quatro dígitos, por favor."],
+        "pin_locked": ["Desculpe, limite de tentativas atingido. Contate o suporte."],
+        "upgrade_ask_plan": ["Claro! Você quer Standard ou Premium?", "Interessado no Standard ou Premium?"],
+        "upgrade_confirm": ["Perfeito, mudar para {plan}. Posso confirmar?", "Upgrade para {plan}. Tudo certo?"],
+        "upgrade_submitted": ["Pronto! Solicitação para {plan} enviada.", "Pedido de {plan} submetido."],
+        "upgrade_cancelled": ["Sem problemas. Me avise se mudar de ideia.", "Cancelado."],
+        "info_not_found": ["Não encontrei informações sobre {type}.", "Nada sobre {type}."],
+        "query_error": ["Tive um problema. Vamos tentar de novo?", "Erro no sistema."],
+        "goodbye": ["Até logo! Ligue se precisar.", "Tchau, tenha um bom dia!"],
+        "ticket_ask_details": ["Posso abrir um chamado. Qual é o problema?", "Descreva o problema para o ticket."],
+        "ticket_created": ["Abri o ticket número {id}.", "Feito. Chamado #{id} criado."],
+        "sub_active": ["Seu plano é {plan}, {name}. Custa {price} dólares por mês."],
+        "sub_status": ["Sua assinatura {plan} está {status}."],
+        "bal_overdue": ["Você tem {amount} dólares vencidos, {name}. Quer ajuda?", "Atenção, {amount} em atraso."],
+        "bal_pending": ["Tem {amount} dólares pendentes, {name}."],
+        "bal_clear": ["Boas notícias, {name}! Tudo pago.", "Saldo zerado."],
+        "invoice_one": ["Uma fatura de {amount} dólares, status {status}."],
+        "invoice_many": ["Vejo {count} faturas. A mais recente é de {amount} dólares, {status}."],
+        "plan_details": ["Plano {name} por {price} dólares. {data} GB de dados."],
+        "ticket_open": ["Você tem {count} chamados abertos. O último é sobre {subject}."],
+        "ticket_resolved": ["Seus {count} chamados estão resolvidos!"],
+        "ticket_none": ["Nenhum chamado de suporte."],
+        "cust_info": ["Email: {email}, Telefone: {phone}."],
+        "general_found": ["Aqui está o que encontrei."],
+    },
+    "ru": {
+        "greeting_new": ["Привет! Назовите ваш четырехзначный PIN-код.", "Здравствуйте. Нужен PIN для входа."],
+        "greeting_returning": ["Привет, {name}! Чем могу помочь?", "Здравствуйте, {name}!"],
+        "pin_invalid": ["Неверный PIN. Осталось {remaining} попытки.", "Ошибка. Попыток: {remaining}."],
+        "pin_unclear": ["Извините, не расслышал. Повторите PIN.", "Повторите 4 цифры."],
+        "pin_locked": ["Лимит попыток исчерпан. Обратитесь в поддержку."],
+        "upgrade_ask_plan": ["Конечно! Выбираете Standard или Premium?", "Standard или Premium?"],
+        "upgrade_confirm": ["Отлично, переход на {plan}. Подтверждаю?", "План {plan}. Оформляем?"],
+        "upgrade_submitted": ["Готово! Заявка на {plan} отправлена.", "Запрос на {plan} создан."],
+        "upgrade_cancelled": ["Без проблем. Скажите, если передумаете.", "Отменено."],
+        "info_not_found": ["Не нашел информации о {type}.", "Нет данных по {type}."],
+        "query_error": ["Произошла ошибка. Попробуем снова?", "Сбой системы."],
+        "goodbye": ["До свидания! Звоните, если что.", "Всего доброго!"],
+        "ticket_ask_details": ["Я создам тикет. Опишите проблему.", "Какая причина обращения?"],
+        "ticket_created": ["Создан тикет номер {id}.", "Готово. Заявка #{id} открыта."],
+        "sub_active": ["У вас план {plan}, {name}. {price} долларов в месяц."],
+        "sub_status": ["Ваша подписка {plan} сейчас {status}."],
+        "bal_overdue": ["У вас долг {amount} долларов, {name}. Помочь?", "Просрочено {amount} долларов."],
+        "bal_pending": ["К оплате {amount} долларов, {name}."],
+        "bal_clear": ["Отличные новости, {name}! Долгов нет.", "Баланс в порядке."],
+        "invoice_one": ["Один счет на {amount} долларов, статус {status}."],
+        "invoice_many": ["Вижу {count} счетов. Последний на {amount} долларов, {status}."],
+        "plan_details": ["План {name} за {price} долларов. {data} ГБ данных."],
+        "ticket_open": ["У вас {count} открытых тикетов. Последний про {subject}."],
+        "ticket_resolved": ["Все ваши {count} тикетов решены!", "Нет открытых проблем."],
+        "ticket_none": ["Нет обращений в поддержку."],
+        "cust_info": ["Email: {email}, Телефон: {phone}."],
+        "general_found": ["Вот что я нашел."],
+    },
+    "ar": {
+        "greeting_new": ["مرحبًا! هل يمكنك إخباري برمز PIN المكون من 4 أرقام؟", "أهلاً بك. أحتاج الرمز السري للتحقق."],
+        "greeting_returning": ["أهلاً {name}! كيف يمكنني مساعدتك اليوم؟", "مرحبًا {name}، سعيد بعودتك."],
+        "pin_invalid": ["الرمز غير صحيح. بقيت {remaining} محاولات.", "خطأ في الرمز. {remaining} محاولات متبقية."],
+        "pin_unclear": ["عفواً، لم أسمع جيداً. هل يمكنك تكرار الرمز؟", "أعد الأرقام الأربعة من فضلك."],
+        "pin_locked": ["عذراً، تم تجاوز الحد المسموح. يرجى الاتصال بالدعم.", "تم قفل الحساب."],
+        "upgrade_ask_plan": ["بالتأكيد! هل تفكر في Standard أم Premium؟", "هل تريد باقة Standard أم Premium؟"],
+        "upgrade_confirm": ["ممتاز، الترقية إلى {plan}. هل أؤكد الطلب؟", "خطة {plan}. موافق؟"],
+        "upgrade_submitted": ["تم! أرسلت طلب الترقية إلى {plan}.", "تم تقديم طلب {plan} بنجاح."],
+        "upgrade_cancelled": ["لا مشكلة. أخبرني إذا غيرت رأيك.", "تم الإلغاء."],
+        "info_not_found": ["لم أجد معلومات حول {type}.", "لا توجد بيانات {type}."],
+        "query_error": ["حدث خطأ بسيط. هل نحاول مرة أخرى؟", "خطأ في النظام."],
+        "goodbye": ["مع السلامة! اتصل في أي وقت.", "يومك سعيد!"],
+        "ticket_ask_details": ["سأفتح تذكرة دعم. ما هي المشكلة؟", "صف لي المشكلة لفتح التذكرة."],
+        "ticket_created": ["فتحت التذكرة رقم {id}.", "تم إنشاء التذكرة #{id}."],
+        "sub_active": ["أنت على خطة {plan} يا {name}. {price} دولار شهرياً.", "باقتك {plan} بسعر {price}."],
+        "sub_status": ["اشتراكك في {plan} حالياً {status}."],
+        "bal_overdue": ["لديك {amount} دولار متأخرة يا {name}. هل أساعدك؟", "تنبيه، عليك {amount} دولار."],
+        "bal_pending": ["عليك {amount} دولار معلقة، يا {name}."],
+        "bal_clear": ["أخبار جيدة يا {name}! رصيدك خالٍ.", "تم سداد كل شيء."],
+        "invoice_one": ["لديك فاتورة واحدة بقيمة {amount} دولار، حالتها {status}."],
+        "invoice_many": ["أرى {count} فواتير. الأحدث بقيمة {amount} دولار، {status}."],
+        "plan_details": ["خطة {name} بـ {price} دولار. {data} جيجابايت بيانات.", "باقة {name}."],
+        "ticket_open": ["لديك {count} تذاكر مفتوحة. الأحدث حول {subject}.", "{count} شكاوى مفتوحة."],
+        "ticket_resolved": ["تم حل جميع تذاكرك الـ {count}!", "لا توجد مشاكل."],
+        "ticket_none": ["لا توجد تذاكر دعم."],
+        "cust_info": ["البريد: {email}، الهاتف: {phone}."],
+        "general_found": ["هذا ما وجدته."],
+    },
+    "zh": {
+        "greeting_new": ["您好！请告诉我您的四位 PIN 码。", "欢迎。我需要验证您的 PIN 码。"],
+        "greeting_returning": ["嗨 {name}！很高兴再见到您。今天有什么可以帮您？", "{name} 您好！"],
+        "pin_invalid": ["PIN 码不正确。还有 {remaining} 次机会。", "不对。剩余 {remaining} 次尝试。"],
+        "pin_unclear": ["抱歉，没听清。请重复 PIN 码。", "请再说一遍那四个数字。"],
+        "pin_locked": ["抱歉，尝试次数过多。请联系客服。", "账户已锁定。"],
+        "upgrade_ask_plan": ["好的！您想要 Standard 还是 Premium 计划？", "Standard 还是 Premium？"],
+        "upgrade_confirm": ["好的，升级到 {plan}。确认吗？", "选择 {plan}。确定提交？"],
+        "upgrade_submitted": ["完成！已提交 {plan} 的升级请求。", "{plan} 申请已发送。"],
+        "upgrade_cancelled": ["没问题。改变主意请告诉我。", "已取消。"],
+        "info_not_found": ["找不到 {type} 信息。", "没有 {type} 数据。"],
+        "query_error": ["出了点小问题。重试一下？", "系统错误。"],
+        "goodbye": ["再见！有需要请随时致电。", "祝您愉快！"],
+        "ticket_ask_details": ["我可以为您开工单。请描述问题。", "工单原因是什么？"],
+        "ticket_created": ["已为您创建工单号 {id}。", "完成。工单 #{id} 已建立。"],
+        "sub_active": ["您的计划是 {plan}，{name}。每月 {price} 美元。", "您正在使用 {plan}。"],
+        "sub_status": ["您的 {plan} 订阅当前状态为 {status}。"],
+        "bal_overdue": ["您有 {amount} 美元逾期，{name}。需要帮忙吗？", "注意，{amount} 欠款。"],
+        "bal_pending": ["您有 {amount} 美元待支付，{name}。"],
+        "bal_clear": ["好消息，{name}！余额已清。", "没有欠款。"],
+        "invoice_one": ["有一张 {amount} 美元的发票，状态是 {status}。"],
+        "invoice_many": ["我有 {count} 张发票。最近一张是 {amount} 美元，{status}。"],
+        "plan_details": ["{name} 计划每月 {price} 美元。包含 {data} GB 数据。", "套餐 {name}。"],
+        "ticket_open": ["您有 {count} 个未结工单。最近一个是关于 {subject}。", "{count} 个问题待处理。"],
+        "ticket_resolved": ["您的 {count} 个工单都已解决！", "问题已解决。"],
+        "ticket_none": ["没有支持工单。"],
+        "cust_info": ["邮箱：{email}，电话：{phone}。"],
+        "general_found": ["这是我找到的信息。"],
+    },
+    "ja": {
+        "greeting_new": ["こんにちは！4桁のPINコードを教えていただけますか？", "本人確認のため、PINコードをお願いします。"],
+        "greeting_returning": ["{name}さん、こんにちは！今日はどのようなご用件ですか？", "お帰りなさい、{name}さん。"],
+        "pin_invalid": ["PINが違います。あと{remaining}回試せます。", "違いますね。残り{remaining}回です。"],
+        "pin_unclear": ["すみません、聞き取れませんでした。もう一度お願いします。", "4桁の数字をもう一度言ってください。"],
+        "pin_locked": ["申し訳ありません、回数制限を超えました。サポートにご連絡ください。", "ロックされました。"],
+        "upgrade_ask_plan": ["承知しました。StandardとPremium、どちらをご希望ですか？", "StandardかPremiumですね？"],
+        "upgrade_confirm": ["{plan}へアップグレードですね。よろしいですか？", "{plan}で進めますか？"],
+        "upgrade_submitted": ["完了しました！{plan}への変更リクエストを送信しました。", "{plan}の手続きをしました。"],
+        "upgrade_cancelled": ["分かりました。またお知らせください。", "キャンセルしました。"],
+        "info_not_found": ["{type}の情報が見つかりませんでした。", "{type}はありません。"],
+        "query_error": ["少し問題が起きました。もう一度試しますか？", "システムエラーです。"],
+        "goodbye": ["失礼いたします！またお電話ください。", "ありがとうございました！"],
+        "ticket_ask_details": ["チケットを作成します。どのような問題ですか？", "チケットの理由を教えてください。"],
+        "ticket_created": ["チケット番号{id}を作成しました。", "完了です。チケット#{id}を発行しました。"],
+        "sub_active": ["現在のプランは{plan}です、{name}さん。月額{price}ドルです。", "{plan}をご利用中です。"],
+        "sub_status": ["{plan}のステータスは現在{status}です。"],
+        "bal_overdue": ["{amount}ドルの未払いがあります、{name}さん。確認しますか？", "注意：{amount}ドルの滞納があります。"],
+        "bal_pending": ["{amount}ドルの支払い待ちがあります。", "請求額は{amount}ドルです。"],
+        "bal_clear": ["良いお知らせです、{name}さん！支払いは完了しています。", "残高はありません。"],
+        "invoice_one": ["{amount}ドルの請求書が1通あります。ステータスは{status}です。"],
+        "invoice_many": ["{count}通の請求書があります。最新のものは{amount}ドルで、{status}です。"],
+        "plan_details": ["{name}プランは月額{price}ドル、データ容量は{data}GBです。", "{name}プランの詳細です。"],
+        "ticket_open": ["未解決のチケットが{count}件あります。最新の件名は{subject}です。", "{count}件のオープンチケットがあります。"],
+        "ticket_resolved": ["{count}件のチケットはすべて解決済みです！", "問題は解決されています。"],
+        "ticket_none": ["サポートチケットはありません。", "履歴はありません。"],
+        "cust_info": ["メールは{email}、電話番号は{phone}です。"],
+        "general_found": ["こちらが見つかった情報です。"],
+    },
+    "ko": {
+        "greeting_new": ["안녕하세요! 4자리 PIN 번호를 말씀해 주시겠어요?", "본인 확인을 위해 PIN 번호가 필요합니다."],
+        "greeting_returning": ["안녕하세요 {name}님! 무엇을 도와드릴까요?", "반갑습니다 {name}님."],
+        "pin_invalid": ["PIN이 일치하지 않습니다. {remaining}번 남았습니다.", "틀렸습니다. {remaining}회 시도 가능합니다."],
+        "pin_unclear": ["죄송합니다, 잘 못 들었습니다. 다시 말씀해 주시겠어요?", "4자리 숫자를 다시 말해주세요."],
+        "pin_locked": ["죄송합니다. 시도 횟수를 초과했습니다. 고객센터에 문의하세요.", "계정이 잠겼습니다."],
+        "upgrade_ask_plan": ["알겠습니다! Standard와 Premium 중 어떤 걸 원하세요?", "Standard인가요, Premium인가요?"],
+        "upgrade_confirm": ["{plan}으로 업그레이드합니다. 진행할까요?", "{plan} 플랜을 선택하셨습니다. 맞나요?"],
+        "upgrade_submitted": ["완료되었습니다! {plan} 업그레이드 요청을 접수했습니다.", "{plan} 신청이 완료되었습니다."],
+        "upgrade_cancelled": ["문제없습니다. 나중에 다시 말씀해 주세요.", "취소되었습니다."],
+        "info_not_found": ["{type} 정보를 찾을 수 없습니다.", "{type} 데이터가 없습니다."],
+        "query_error": ["문제가 발생했습니다. 다시 시도해 볼까요?", "시스템 오류입니다."],
+        "goodbye": ["안녕히 계세요! 필요하면 다시 전화 주세요.", "감사합니다. 좋은 하루 되세요!"],
+        "ticket_ask_details": ["티켓을 생성해 드리겠습니다. 어떤 문제가 있나요?", "티켓 사유를 말씀해 주세요."],
+        "ticket_created": ["티켓 번호 {id}번이 생성되었습니다.", "완료. 티켓 #{id} 접수됨."],
+        "sub_active": ["현재 {plan} 플랜을 이용 중이십니다, {name}님. 월 {price} 달러입니다.", "{plan} 요금제 사용 중."],
+        "sub_status": ["{plan} 구독 상태는 현재 {status}입니다."],
+        "bal_overdue": ["{amount} 달러의 연체금이 있습니다, {name}님. 도와드릴까요?", "주의: {amount} 달러 미납."],
+        "bal_pending": ["결제 대기 중인 금액이 {amount} 달러입니다.", "미결제 금액: {amount} 달러."],
+        "bal_clear": ["좋은 소식입니다, {name}님! 미납금이 없습니다.", "잔액이 0입니다."],
+        "invoice_one": ["{amount} 달러짜리 청구서가 하나 있습니다. 상태는 {status}입니다."],
+        "invoice_many": ["총 {count}개의 청구서가 있습니다. 최근 청구서는 {amount} 달러이고 {status} 상태입니다."],
+        "plan_details": ["{name} 플랜은 월 {price} 달러이며, 데이터 {data}GB가 제공됩니다.", "{name} 상세 정보입니다."],
+        "ticket_open": ["{count}개의 열린 티켓이 있습니다. 최근 건은 {subject} 관련입니다.", "진행 중인 문의가 {count}건 있습니다."],
+        "ticket_resolved": ["{count}개의 티켓이 모두 해결되었습니다!", "모든 문의가 처리되었습니다."],
+        "ticket_none": ["접수된 지원 티켓이 없습니다.", "문의 내역 없음."],
+        "cust_info": ["이메일은 {email}, 전화번호는 {phone}입니다."],
+        "general_found": ["검색 결과입니다."],
     },
 }
 
@@ -1957,13 +2093,48 @@ def analyze_sentiment(text, language='en', conversation_history=None):
     
     text_lower = text.lower()
     
+    # Normalize language code
+    lang_code = language.split('-')[0].lower() if '-' in language else language.lower()
+
     # Calculate scores
     negative_score = 0.0
     positive_score = 0.0
     trigger_phrases = []
-    
+    churn_risk = "none"
+    action = None
+    label = "neutral"
+
+    # 1. Check CHURN INDICATORS (Highest Priority) - Explicit cancellation intent
+    # Check both specific language and English as fallback
+    churn_lists = [CHURN_INDICATORS.get(lang_code, []), CHURN_INDICATORS.get('en', [])]
+    found_churn = False
+
+    for lst in churn_lists:
+        for phrase in lst:
+            if phrase.lower() in text_lower:
+                churn_risk = "high"
+                label = "cancellation_intent"
+                action = "URGENT: Customer wants to cancel. Immediate retention call required."
+                trigger_phrases.append(phrase)
+                negative_score += 1.0  # Max negative impact
+                found_churn = True
+                break
+        if found_churn:
+            break
+
+    # 2. Check EXTENDED NEGATIVE KEYWORDS (Medium Priority)
+    # Check both specific language and English
+    neg_lists = [NEGATIVE_SENTIMENT_KEYWORDS.get(lang_code, []), NEGATIVE_SENTIMENT_KEYWORDS.get('en', [])]
+
+    for lst in neg_lists:
+        for phrase in lst:
+            if phrase.lower() in text_lower and phrase not in trigger_phrases:
+                negative_score += 0.5
+                trigger_phrases.append(phrase)
+
+    # 3. Check LEGACY WEIGHTED INDICATORS (Specific Weights)
     for phrase, weight in NEGATIVE_INDICATORS.items():
-        if phrase in text_lower:
+        if phrase in text_lower and phrase not in trigger_phrases:
             negative_score += weight
             trigger_phrases.append(phrase)
     
@@ -1978,41 +2149,33 @@ def analyze_sentiment(text, language='en', conversation_history=None):
     # Final sentiment score (-1 = very negative, 0 = neutral, 1 = very positive)
     sentiment_score = positive_score - negative_score
     
-    # Determine label and churn risk
-    if sentiment_score <= -0.6:
-        label = "very_negative"
-        churn_risk = "high"
-        action = "URGENT: Immediate callback by senior agent. Offer compensation/discount."
-    elif sentiment_score <= -0.35:
-        label = "negative"
-        churn_risk = "medium"
-        action = "Priority callback within 24h. Address specific complaints."
-    elif sentiment_score <= -0.15:
-        label = "slightly_negative"
-        churn_risk = "low"
-        action = "Monitor conversation. Follow up if issues persist."
-    elif sentiment_score >= 0.3:
-        label = "positive"
-        churn_risk = "none"
-        action = None
-    else:
-        label = "neutral"
-        churn_risk = "none"
-        action = None
-    
-    # Check for explicit cancellation intent (always high risk)
-    cancel_words = ['cancel', 'terminate', 'unsubscribe', 'לבטל', 'ביטול', 'להתנתק']
-    for word in cancel_words:
-        if word in text_lower:
+    # Determine label and churn risk (if not already set to high by churn indicators)
+    if churn_risk != "high":
+        if sentiment_score <= -0.6:
+            label = "very_negative"
             churn_risk = "high"
-            label = "cancellation_intent"
-            action = "URGENT: Customer wants to cancel. Immediate retention call required."
-            break
+            action = "URGENT: Immediate callback by senior agent. Offer compensation/discount."
+        elif sentiment_score <= -0.35:
+            label = "negative"
+            churn_risk = "medium"
+            action = "Priority callback within 24h. Address specific complaints."
+        elif sentiment_score <= -0.15:
+            label = "slightly_negative"
+            churn_risk = "low"
+            action = "Monitor conversation. Follow up if issues persist."
+        elif sentiment_score >= 0.3:
+            label = "positive"
+            churn_risk = "none"
+            action = None
+        else:
+            label = "neutral"
+            churn_risk = "none"
+            action = None
     
     return {
         'score': round(sentiment_score, 2),
         'label': label,
-        'trigger_phrases': trigger_phrases,
+        'trigger_phrases': list(set(trigger_phrases)), # Deduplicate
         'churn_risk': churn_risk,
         'recommended_action': action,
         'needs_alert': churn_risk in ['high', 'medium']
@@ -2023,6 +2186,27 @@ def detect_query_type(text):
     """Detect what type of information the user is asking about"""
     text_lower = text.lower()
     
+    # Bug Fix: "How many open tickets" was triggering "create_ticket" due to "open ticket" keyword.
+    # We must prioritize status queries over creation commands when ambiguity exists.
+
+    # Indicators that suggest a query/question rather than a command
+    query_indicators = [
+        'how many', 'list', 'show', 'check', 'status', 'what are', 'do i have', 'any',
+        'כמה', 'רשימת', 'הראה', 'בדוק', 'סטטוס', 'מה הם', 'האם יש לי', 'כמה'
+    ]
+
+    # Check for "open ticket" overlap
+    ambiguous_phrases = [
+        'open ticket', 'open tickets', 'tickets open',
+        'כרטיס פתוח', 'קריאה פתוחה', 'טיקט פתוח', 'קריאות פתוחות', 'כרטיסים פתוחים'
+    ]
+
+    # If phrase contains "open ticket" AND a query indicator -> It's a 'tickets' query (view)
+    if any(phrase in text_lower for phrase in ambiguous_phrases):
+        if any(indicator in text_lower for indicator in query_indicators):
+            logging.info("[Intent] Disambiguated 'open ticket' as query (tickets) due to query indicator")
+            return 'tickets'
+
     for query_type, triggers in QUERY_TRIGGERS.items():
         for trigger in triggers:
             if trigger in text_lower:
@@ -2065,10 +2249,68 @@ def is_cancellation(text):
 
 
 # =============================================================================
+# DB TERM TRANSLATIONS - Avoid mixing English status terms in foreign sentences
+# =============================================================================
+DB_TERM_TRANSLATIONS = {
+    'en': {
+        'active': 'active', 'suspended': 'suspended', 'cancelled': 'cancelled',
+        'pending': 'pending', 'paid': 'paid', 'overdue': 'overdue',
+        'open': 'open', 'resolved': 'resolved', 'closed': 'closed', 'in_progress': 'in progress',
+        'low': 'low', 'medium': 'medium', 'high': 'high', 'urgent': 'urgent',
+        'email': 'email', 'phone': 'phone', 'priority': 'priority'
+    },
+    'es': {
+        'active': 'activo', 'suspended': 'suspendido', 'cancelled': 'cancelado',
+        'pending': 'pendiente', 'paid': 'pagado', 'overdue': 'vencido',
+        'open': 'abierto', 'resolved': 'resuelto', 'closed': 'cerrado', 'in_progress': 'en progreso',
+        'low': 'baja', 'medium': 'media', 'high': 'alta', 'urgent': 'urgente',
+        'email': 'correo', 'phone': 'teléfono', 'priority': 'prioridad'
+    },
+    'fr': {
+        'active': 'actif', 'suspended': 'suspendu', 'cancelled': 'annulé',
+        'pending': 'en attente', 'paid': 'payé', 'overdue': 'en retard',
+        'open': 'ouvert', 'resolved': 'résolu', 'closed': 'fermé', 'in_progress': 'en cours',
+        'low': 'basse', 'medium': 'moyenne', 'high': 'haute', 'urgent': 'urgente',
+        'email': 'email', 'phone': 'téléphone', 'priority': 'priorité'
+    },
+    'de': {
+        'active': 'aktiv', 'suspended': 'ausgesetzt', 'cancelled': 'gekündigt',
+        'pending': 'ausstehend', 'paid': 'bezahlt', 'overdue': 'überfällig',
+        'open': 'offen', 'resolved': 'gelöst', 'closed': 'geschlossen', 'in_progress': 'in bearbeitung',
+        'low': 'niedrig', 'medium': 'mittel', 'high': 'hoch', 'urgent': 'dringend',
+        'email': 'email', 'phone': 'telefon', 'priority': 'priorität'
+    },
+    'it': {
+        'active': 'attivo', 'suspended': 'sospeso', 'cancelled': 'cancellato',
+        'pending': 'in attesa', 'paid': 'pagato', 'overdue': 'scaduto',
+        'open': 'aperto', 'resolved': 'risolto', 'closed': 'chiuso', 'in_progress': 'in corso',
+        'low': 'bassa', 'medium': 'media', 'high': 'alta', 'urgent': 'urgente',
+        'email': 'email', 'phone': 'telefono', 'priority': 'priorità'
+    },
+    'pt': {
+        'active': 'ativo', 'suspended': 'suspenso', 'cancelled': 'cancelado',
+        'pending': 'pendente', 'paid': 'pago', 'overdue': 'vencido',
+        'open': 'aberto', 'resolved': 'resolvido', 'closed': 'fechado', 'in_progress': 'em andamento',
+        'low': 'baixa', 'medium': 'média', 'high': 'alta', 'urgent': 'urgente',
+        'email': 'email', 'phone': 'telefone', 'priority': 'prioridade'
+    },
+}
+
+def translate_db_term(term, lang):
+    """Translate database terms (status, priority) to target language"""
+    if not term: return ""
+    term_lower = str(term).lower()
+    # Normalize lang code
+    lang_code = lang.split('-')[0].lower()
+
+    translations = DB_TERM_TRANSLATIONS.get(lang_code, DB_TERM_TRANSLATIONS['en'])
+    return translations.get(term_lower, term)  # Fallback to original if not found
+
+# =============================================================================
 # RESPONSE FORMATTERS - Natural language for voice (multi-language)
 # =============================================================================
 def format_query_results(query_type, results, customer_name=None, lang="en"):
-    """Format database results into natural conversational language"""
+    """Format database results into natural conversational language using localized templates"""
     name = customer_name.split()[0] if customer_name else ""  # First name only
     
     if not results or len(results) == 0:
@@ -2077,14 +2319,16 @@ def format_query_results(query_type, results, customer_name=None, lang="en"):
     if query_type == 'subscription':
         r = results[0]
         status = r.get('status', 'unknown')
+        # Translate status
+        status_tr = translate_db_term(status, lang)
+
         plan = r.get('plan_name', 'your plan')
         price = r.get('price', 0)
-        auto_renew = "on" if r.get('auto_renew') else "off"
         
         if status == 'active':
-            return f"You're on the {plan} plan, {name}. That's {price} dollars a month with auto-renewal {auto_renew}."
+            return get_natural_response('sub_active', lang=lang, plan=plan, name=name, price=price)
         else:
-            return f"Your {plan} subscription is currently {status}."
+            return get_natural_response('sub_status', lang=lang, plan=plan, status=status_tr)
     
     elif query_type == 'balance':
         r = results[0]
@@ -2092,22 +2336,23 @@ def format_query_results(query_type, results, customer_name=None, lang="en"):
         overdue = float(r.get('overdue_amount', 0))
         
         if overdue > 0:
-            return f"Looks like you have {overdue:.2f} dollars overdue, {name}. Want me to help you sort that out?"
+            return get_natural_response('bal_overdue', lang=lang, amount=f"{overdue:.2f}", name=name)
         elif pending > 0:
-            return f"You've got {pending:.2f} dollars pending, {name}. Nothing overdue though!"
+            return get_natural_response('bal_pending', lang=lang, amount=f"{pending:.2f}", name=name)
         else:
-            return f"Good news, {name}! Your balance is all clear."
+            return get_natural_response('bal_clear', lang=lang, name=name)
     
     elif query_type == 'invoices':
         count = len(results)
         latest = results[0]
         amount = latest.get('amount', 0)
         status = latest.get('status', 'unknown')
+        status_tr = translate_db_term(status, lang)
         
         if count == 1:
-            return f"You've got one invoice for {amount} dollars, and it's {status}."
+            return get_natural_response('invoice_one', lang=lang, amount=amount, status=status_tr)
         else:
-            return f"I see {count} invoices. Your most recent one is {amount} dollars, currently {status}."
+            return get_natural_response('invoice_many', lang=lang, count=count, amount=amount, status=status_tr)
     
     elif query_type == 'plan':
         r = results[0]
@@ -2115,25 +2360,27 @@ def format_query_results(query_type, results, customer_name=None, lang="en"):
         price = r.get('price', 0)
         data = r.get('data_limit_gb', 'unlimited')
         support = r.get('support_level', 'standard')
+        # Translate support level if it matches a term
+        support = translate_db_term(support, lang)
         
-        return f"You're on {name_plan} at {price} dollars per month. You've got {data} gigs of data and {support} level support."
+        return get_natural_response('plan_details', lang=lang, name=name_plan, price=price, data=data, support=support)
     
     elif query_type == 'tickets':
         open_tickets = [t for t in results if t.get('status') == 'open']
         if open_tickets:
-            subject = open_tickets[0].get('subject', 'an open issue')
-            return f"You have {len(open_tickets)} open ticket{'s' if len(open_tickets) > 1 else ''}, {name}. The most recent is about {subject}."
+            subject = open_tickets[0].get('subject', 'an issue')
+            return get_natural_response('ticket_open', lang=lang, count=len(open_tickets), name=name, subject=subject)
         elif results:
-            return f"Good news - all your {len(results)} support tickets have been resolved!"
-        return "You don't have any support tickets on file."
+            return get_natural_response('ticket_resolved', lang=lang, count=len(results))
+        return get_natural_response('ticket_none', lang=lang)
     
     elif query_type == 'customer_info':
         r = results[0]
         email = r.get('email', 'not set')
         phone = r.get('phone', 'not set')
-        return f"Your account email is {email} and phone is {phone}."
+        return get_natural_response('cust_info', lang=lang, email=email, phone=phone)
     
-    return "Here's what I found for you."
+    return get_natural_response('general_found', lang=lang)
 
 
 def generate_card_payload(query_type, results):
@@ -2627,6 +2874,13 @@ async def synthesize_with_xtts(text: str, settings: dict, max_retries: int = 2) 
                         return audio_data
                     else:
                          logging.warning("[TTS] Received empty audio body")
+
+                # Fallback for 400 Bad Request (likely invalid speaker)
+                elif response.status_code == 400 and payload.get("speaker") and payload["speaker"] != "default":
+                    logging.warning(f"[TTS] 400 Error with speaker '{speaker}'. Retrying with 'default'...")
+                    payload.pop("speaker", None)
+                    # Retry immediately without incrementing attempt count heavily
+                    continue
                 else:
                     logging.warning(f"[TTS] Failed: {response.status_code}")
                     
@@ -2647,11 +2901,11 @@ async def synthesize_with_xtts(text: str, settings: dict, max_retries: int = 2) 
     return b""
 
 
-async def stream_tts_for_sentence(websocket, text_to_synthesize, stream_start_time, metrics, settings: dict):
-    """Synthesize and stream TTS for a sentence"""
+async def stream_tts_for_sentence(websocket, text_to_synthesize, stream_start_time, metrics, settings: dict) -> bool:
+    """Synthesize and stream TTS for a sentence. Returns True if audio sent."""
     text_to_synthesize = clean_tts_text(text_to_synthesize)
     if not text_to_synthesize:
-        return
+        return False
     
     logging.info(f"[TTS Task] Synthesizing: \"{text_to_synthesize[:50]}...\"")
     
@@ -2669,9 +2923,13 @@ async def stream_tts_for_sentence(websocket, text_to_synthesize, stream_start_ti
                 chunk = audio_data[i:i + chunk_size]
                 metrics['llm_tts_metrics']['tts_chunk_latencies'].append(time.time() - stream_start_time)
                 await websocket.send(chunk)
+
+            return True
                 
     except Exception as e:
         logging.error(f"[TTS Task] Error: {e}")
+
+    return False
 
 
 # =============================================================================
@@ -3398,9 +3656,18 @@ async def main_pipeline(websocket, audio_bytes: bytes, settings: dict, session_i
                 await task
 
         # Safe gather for TTS tasks
+        audio_sent = False
         if tts_tasks:
-            await asyncio.gather(*tts_tasks, return_exceptions=True)
+            results = await asyncio.gather(*tts_tasks, return_exceptions=True)
+            for res in results:
+                if res is True:
+                    audio_sent = True
         
+        # Fallback if text generated but no audio (silent failure)
+        if full_response and not audio_sent:
+            logging.error("[TTS] Critical: Text generated but NO audio sent!")
+            await websocket.send("Error: Voice generation failed. Please check TTS server.")
+
         # Save response to history
         if conversation:
             conversation.add_message("assistant", full_response)
@@ -3643,7 +3910,7 @@ async def health_handler(reader, writer):
     
     health_data = {
         "status": "healthy",
-        "version": "4.1.0",
+        "version": "5.0.0",
         "database_pool": db_status,
         "http_client": http_status,
         "active_sessions": sessions_count
@@ -3683,7 +3950,7 @@ async def graceful_shutdown():
 async def main():
     host, port = "0.0.0.0", 8765
     logging.info("=" * 60)
-    logging.info("Voice Agent WebSocket Server v4.1.0")
+    logging.info("Voice Agent WebSocket Server v5.0.0")
     logging.info("Natural Conversation + Smart Upgrade Flow")
     logging.info("Whisper ASR + XTTS v2 TTS")
     logging.info("=" * 60)

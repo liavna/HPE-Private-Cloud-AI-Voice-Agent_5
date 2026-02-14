@@ -1941,6 +1941,10 @@ TTS_LANGUAGES = {
         "display_name": "🇰🇷 Korean",
         "response_instruction": "\n\n언어 규칙: 한국어로만 답변해야 합니다. 사용자가 다른 언어로 말해도 이해하되 항상 자연스러운 대화체 한국어로 답변하세요.",
     },
+    "hi": {
+        "display_name": "🇮🇳 Hindi",
+        "response_instruction": "\n\nLANGUAGE RULE: You MUST respond ONLY in Hindi. Even if the user speaks another language, understand them but ALWAYS reply in natural, conversational Hindi.",
+    },
 }
 
 # ASR Languages supported by Whisper (for input speech recognition)
@@ -1949,7 +1953,7 @@ TTS_LANGUAGES = {
 ASR_LANGUAGES = {
     "auto": "🌐 Auto-detect",
     "en": "🇺🇸 English",
-    "he": "🇮🇱 Hebrew (עברית) ⚠️ Response in English",
+    "he": "🇮🇱 Hebrew (עברית)",
     "es": "🇪🇸 Spanish",
     "fr": "🇫🇷 French",
     "de": "🇩🇪 German",
@@ -1975,6 +1979,35 @@ ASR_LANGUAGES = {
     "da": "🇩🇰 Danish",
     "fi": "🇫🇮 Finnish",
     "no": "🇳🇴 Norwegian",
+    "bg": "🇧🇬 Bulgarian",
+    "ca": "🏴 Catalonian",
+    "hr": "🇭🇷 Croatian",
+    "cs": "🇨🇿 Czech",
+    "et": "🇪🇪 Estonian",
+    "hu": "🇭🇺 Hungarian",
+    "id": "🇮🇩 Indonesian",
+    "lv": "🇱🇻 Latvian",
+    "lt": "🇱🇹 Lithuanian",
+    "ms": "🇲🇾 Malay",
+    "sk": "🇸🇰 Slovak",
+    "sl": "🇸🇮 Slovenian",
+    "tl": "🇵🇭 Tagalog",
+    "ta": "🇮🇳 Tamil",
+    "te": "🇮🇳 Telugu",
+    "ur": "🇵🇰 Urdu",
+    "cy": "🏴󠁧󠁢󠁷󠁬󠁳󠁿 Welsh",
+    "sw": "🇰🇪 Swahili",
+    "af": "🇿🇦 Afrikaans",
+    "is": "🇮🇸 Icelandic",
+    "km": "🇰🇭 Khmer",
+    "lo": "🇱🇦 Lao",
+    "mk": "🇲🇰 Macedonian",
+    "ml": "🇮🇳 Malayalam",
+    "mr": "🇮🇳 Marathi",
+    "my": "🇲🇲 Burmese",
+    "ne": "🇳🇵 Nepali",
+    "sr": "🇷🇸 Serbian",
+    "si": "🇱🇰 Sinhala",
 }
 
 DEFAULT_CONFIG = {
@@ -2390,7 +2423,8 @@ async def process_audio(
     asr_server_address, asr_language_code,
     tts_server_address, tts_language_code, tts_voice,
     db_enabled, db_host, db_port, db_name, db_user, db_password,
-    session_suffix="initial"
+    session_suffix="initial",
+    client_session_id=None
 ) -> AsyncGenerator:
     
     if isinstance(audio_filepath, dict):
@@ -2412,7 +2446,13 @@ async def process_audio(
     
     # Session ID includes suffix so reset button creates new session
     import hashlib
-    session_base = f"{db_host}:{db_port}:{db_name}:{db_user}:{session_suffix}"
+    # Fix: Use client_session_id if available to ensure unique session per browser
+    if client_session_id and str(client_session_id).strip():
+        session_base = f"{client_session_id}:{session_suffix}"
+    else:
+        # Fallback to DB-based hash (legacy behavior, causes collisions)
+        session_base = f"{db_host}:{db_port}:{db_name}:{db_user}:{session_suffix}"
+
     session_id = hashlib.md5(session_base.encode()).hexdigest()[:16]
     
     # Validate and fix LLM URL
@@ -2810,11 +2850,11 @@ def create_ui():
         block_background_fill="white"
     )
     
-    with gr.Blocks(title="HPE AI Voice Agent v4.1.0", theme=modern_theme, css=custom_css) as demo:
+    with gr.Blocks(title="HPE AI Voice Agent v5.0.0", theme=modern_theme, css=custom_css) as demo:
         
         gr.Markdown("""
         # 🎙️ AI Voice Agent
-        ### Powered by HPE Private Cloud AI | v4.1.0
+        ### Powered by HPE Private Cloud AI | v5.0.0
         
         **Interaction Modes:**
         - **Push-to-Talk**: Record → Click Send → Listen to response
@@ -2864,6 +2904,8 @@ def create_ui():
                             )
                             # Hidden session suffix - changes when reset is clicked
                             session_suffix = gr.Textbox(value="initial", visible=False, elem_id="session-suffix")
+                            # Client-side session ID (unique per browser)
+                            client_session_id = gr.Textbox(value="", visible=False, elem_id="client-session-id")
                             
                             conv_html = gr.HTML(value="""
 <div style="background: linear-gradient(135deg, #1e3a5f 0%, #2d5a87 100%); border-radius: 16px; padding: 24px; color: white; position: relative; overflow: hidden;">
@@ -3179,6 +3221,7 @@ def create_ui():
                             # French Male
                             "Adde Michal",         # 🇫🇷 French - Elegant
                             "Filip Traverse",      # 🇫🇷 French - Professional
+                            "Fabien Rosen",        # 🇫🇷 French - Casual
                             # Spanish Male
                             "Ferran Sansen",       # 🇪🇸 Spanish/Catalan - Warm
                             "Dionisio Schuyler",   # 🇪🇸 Spanish - Professional
@@ -3274,7 +3317,7 @@ def create_ui():
                             "hi": {
                                 "female": ["Chandra MacFarland", "Asya Anara", "Ige Behringer"],
                                 "male": ["Kumar Dahl", "Badr Odhiambo", "Suad Qasim"]
-                            }
+                            },
                         }
                         
                         # Function to get voices for a language (combined male + female)
@@ -3629,7 +3672,7 @@ def create_ui():
             
             with gr.TabItem("ℹ️ About"):
                 gr.Markdown("""
-                ## 🎙️ AI Voice Agent v4.1.0
+                ## 🎙️ AI Voice Agent v5.0.0
                 
                 **End-to-end voice AI solution powered by HPE Private Cloud AI**
                 
@@ -3665,6 +3708,12 @@ def create_ui():
                 *   **Performance Metrics:** Latency tracking for ASR, LLM, and TTS generation.
                 *   **Customer Context:** Dynamic customer dashboard showing plans, tickets, and invoices.
                 
+                ### 🆕 v5.0.0 Changelog
+                *   **Enhanced Language Support:** Full support for Hebrew, Spanish, French, and all Whisper/XTTS languages.
+                *   **Sentiment Analysis:** Improved multi-language sentiment detection and churn risk alerts.
+                *   **Session Stability:** Fixed "silent agent" issues with unique browser sessions.
+                *   **Database:** Native language responses for account/ticket queries.
+
                 ### 📋 Quick Start Guide
                 
                 1.  **Initialize Database:** Go to the **Database** tab and click **"Enable & Initialize"** to create demo data.
@@ -3984,21 +4033,21 @@ def create_ui():
         all_inputs = [
             input_audio, llm_api_base, llm_api_key, llm_model_name, llm_prompt_template,
             asr_server_address, asr_language_code, tts_server_address, tts_language_code, tts_voice,
-            db_enabled, db_host, db_port, db_name, db_user, db_password, session_suffix
+            db_enabled, db_host, db_port, db_name, db_user, db_password, session_suffix, client_session_id
         ]
         submit_btn.click(fn=process_audio, inputs=all_inputs, outputs=[audio_data_holder, status_log, input_audio, customer_info_display, performance_display, rich_card_display])
         
         upload_inputs = [
             upload_audio, llm_api_base, llm_api_key, llm_model_name, llm_prompt_template,
             asr_server_address, asr_language_code, tts_server_address, tts_language_code, tts_voice,
-            db_enabled, db_host, db_port, db_name, db_user, db_password, session_suffix
+            db_enabled, db_host, db_port, db_name, db_user, db_password, session_suffix, client_session_id
         ]
         submit_upload_btn.click(fn=process_audio, inputs=upload_inputs, outputs=[audio_data_holder, status_log, upload_audio, customer_info_display, performance_display, rich_card_display])
         
         conv_inputs = [
             conv_audio, llm_api_base, llm_api_key, llm_model_name, llm_prompt_template,
             asr_server_address, asr_language_code, tts_server_address, tts_language_code, tts_voice,
-            db_enabled, db_host, db_port, db_name, db_user, db_password, session_suffix
+            db_enabled, db_host, db_port, db_name, db_user, db_password, session_suffix, client_session_id
         ]
         conv_audio.change(fn=process_audio, inputs=conv_inputs, outputs=[audio_data_holder, status_log, conv_audio, customer_info_display, performance_display, rich_card_display])
         
@@ -4114,10 +4163,28 @@ def create_ui():
             
             // Generate or retrieve session ID
             if (!window.sessionId) {
-                window.sessionId = localStorage.getItem('voiceAgentSession') || 'session_' + Math.random().toString(36).substr(2, 16);
-                localStorage.setItem('voiceAgentSession', window.sessionId);
+                window.sessionId = localStorage.getItem('voiceAgentSession');
+                if (!window.sessionId) {
+                    // Generate UUID-like string
+                    window.sessionId = (typeof crypto !== 'undefined' && crypto.randomUUID) ?
+                        crypto.randomUUID() :
+                        'session_' + Math.random().toString(36).substr(2, 16);
+                    localStorage.setItem('voiceAgentSession', window.sessionId);
+                }
             }
             
+            // Sync with hidden Gradio component (try input and textarea)
+            setTimeout(() => {
+                const sessionInput = document.querySelector('#client-session-id textarea') || document.querySelector('#client-session-id input');
+                if (sessionInput) {
+                    console.log('[Init] Setting client session ID:', window.sessionId);
+                    sessionInput.value = window.sessionId;
+                    sessionInput.dispatchEvent(new Event('input', { bubbles: true }));
+                } else {
+                    console.warn('[Init] Could not find client-session-id component');
+                }
+            }, 1000); // Wait for Gradio to render
+
             // Simple state - based on working v0.1.88 code
             // FIX: Initialize thresholds from slider default value (20)
             const defaultThreshold = 20;
@@ -4317,7 +4384,7 @@ def create_ui():
                 }
             }, 1000);
             
-            console.log('[CustomerInfo] Initialized v4.1.0 (polling restore + auto-refresh)');
+            console.log('[CustomerInfo] Initialized v5.0.0 (polling restore + auto-refresh)');
             // ===============================================
             
             // ===============================================
@@ -5553,7 +5620,7 @@ def create_ui():
     return demo
 
 if __name__ == "__main__":
-    print("Starting Voice Agent v4.1.0 - Improved LLM Check, Voice Quality, Customer Actions...")
+    print("Starting Voice Agent v5.0.0 - Improved Language Support, Sentiment Analysis, Session Stability...")
     demo = create_ui()
     demo.queue()
     demo.launch(server_name="0.0.0.0", server_port=8080, show_error=True)
