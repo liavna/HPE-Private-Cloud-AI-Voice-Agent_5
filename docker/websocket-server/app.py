@@ -53,7 +53,7 @@ except ImportError:
     ASYNCPG_AVAILABLE = False
 
 # Build Metadata
-BUILD_NUMBER = "5.0.0.1001"
+BUILD_NUMBER = "5.0.0"
 
 # =============================================================================
 # GLOBAL CONNECTION POOLS (Performance improvement)
@@ -75,12 +75,13 @@ async def get_http_client() -> httpx.AsyncClient:
         if _http_client is not None and not _http_client.is_closed:
             return _http_client
             
+        # Disable HTTP/2 to prevent 'h11' protocol errors with some TTS servers
         _http_client = httpx.AsyncClient(
             timeout=httpx.Timeout(60.0, connect=10.0),
             limits=httpx.Limits(max_keepalive_connections=20, max_connections=50),
-            http2=True
+            http2=False
         )
-        logging.info("[HTTP] Created new HTTP client pool")
+        logging.info("[HTTP] Created new HTTP client pool (HTTP/1.1)")
     
     return _http_client
 
@@ -3082,23 +3083,23 @@ async def stream_tts_for_sentence(websocket, text_to_synthesize, stream_start_ti
 # LANGUAGE INSTRUCTIONS FOR LLM - Ensure response in correct language
 # =============================================================================
 LANGUAGE_INSTRUCTIONS = {
-    "en": "LANGUAGE: You MUST respond ONLY in English. Even if the user speaks Hebrew, Arabic, or another language - understand them but ALWAYS reply in natural, conversational English.",
-    "es": "IDIOMA: DEBES responder SOLAMENTE en español. Aunque el usuario hable otro idioma, entiéndelo pero SIEMPRE responde en español natural y conversacional.",
-    "fr": "LANGUE: Tu DOIS répondre UNIQUEMENT en français. Même si l'utilisateur parle une autre langue, comprends-le mais réponds TOUJOURS en français naturel et conversationnel.",
-    "de": "SPRACHE: Du MUSST ausschließlich auf Deutsch antworten. Auch wenn der Benutzer eine andere Sprache spricht, verstehe ihn aber antworte IMMER in natürlichem Deutsch.",
-    "it": "LINGUA: DEVI rispondere SOLO in italiano. Anche se l'utente parla un'altra lingua, capiscilo ma rispondi SEMPRE in italiano naturale.",
-    "pt": "IDIOMA: Você DEVE responder APENAS em português. Mesmo que o usuário fale outro idioma, entenda-o mas responda SEMPRE em português natural.",
-    "pl": "JĘZYK: MUSISZ odpowiadać TYLKO po polsku. Nawet jeśli użytkownik mówi w innym języku, zrozum go ale ZAWSZE odpowiadaj po polsku.",
-    "tr": "DİL: SADECE Türkçe yanıt vermelisin. Kullanıcı başka bir dilde konuşsa bile, onu anla ama HER ZAMAN Türkçe yanıt ver.",
-    "ru": "ЯЗЫК: Ты ДОЛЖЕН отвечать ТОЛЬКО на русском. Даже если пользователь говорит на другом языке, пойми его но ВСЕГДА отвечай на русском.",
-    "nl": "TAAL: Je MOET ALLEEN in het Nederlands antwoorden. Ook als de gebruiker een andere taal spreekt, begrijp hem maar antwoord ALTIJD in het Nederlands.",
-    "cs": "JAZYK: MUSÍŠ odpovídat POUZE česky. I když uživatel mluví jiným jazykem, porozuměj mu ale VŽDY odpovídej česky.",
-    "ar": "اللغة: يجب أن تجيب باللغة العربية فقط. حتى لو تحدث المستخدم بلغة أخرى، افهمه لكن أجب دائماً بالعربية.",
-    "zh-cn": "语言规则：你必须只用中文回答。即使用户说其他语言，也要理解他们但始终用中文回答。",
-    "zh": "语言规则：你必须只用中文回答。即使用户说其他语言，也要理解他们但始终用中文回答。",
-    "ja": "言語ルール：日本語のみで回答してください。ユーザーが他の言語を話しても、理解した上で必ず日本語で回答してください。",
-    "hu": "NYELV: CSAK magyarul válaszolj. Még ha a felhasználó más nyelven beszél is, értsd meg de MINDIG magyarul válaszolj.",
-    "ko": "언어 규칙: 한국어로만 답변해야 합니다. 사용자가 다른 언어로 말해도 이해하되 항상 한국어로 답변하세요.",
+    "en": "LANGUAGE: You MUST respond ONLY in English. Even if the user speaks Hebrew, Arabic, or another language - understand them but ALWAYS reply in natural, conversational English. Never use non-English numbers or terms.",
+    "es": "IDIOMA: DEBES responder SOLAMENTE en español. Aunque el usuario hable otro idioma, entiéndelo pero SIEMPRE responde en español natural y conversacional. No uses palabras en inglés.",
+    "fr": "LANGUE: Tu DOIS répondre UNIQUEMENT en français. Même si l'utilisateur parle une autre langue, comprends-le mais réponds TOUJOURS en français naturel et conversationnel. N'utilise pas de mots anglais.",
+    "de": "SPRACHE: Du MUSST ausschließlich auf Deutsch antworten. Auch wenn der Benutzer eine andere Sprache spricht, verstehe ihn aber antworte IMMER in natürlichem Deutsch. Keine englischen Wörter.",
+    "it": "LINGUA: DEVI rispondere SOLO in italiano. Anche se l'utente parla un'altra lingua, capiscilo ma rispondi SEMPRE in italiano naturale. Non usare parole inglesi.",
+    "pt": "IDIOMA: Você DEVE responder APENAS em português. Mesmo que o usuário fale outro idioma, entenda-o mas responda SEMPRE em português natural. Não use palavras em inglês.",
+    "pl": "JĘZYK: MUSISZ odpowiadać TYLKO po polsku. Nawet jeśli użytkownik mówi w innym języku, zrozum go ale ZAWSZE odpowiadaj po polsku. Nie używaj angielskich słów.",
+    "tr": "DİL: SADECE Türkçe yanıt vermelisin. Kullanıcı başka bir dilde konuşsa bile, onu anla ama HER ZAMAN Türkçe yanıt ver. İngilizce kelime kullanma.",
+    "ru": "ЯЗЫК: Ты ДОЛЖЕН отвечать ТОЛЬКО на русском. Даже если пользователь говорит на другом языке, пойми его но ВСЕГДА отвечай на русском. Не используй английские слова.",
+    "nl": "TAAL: Je MOET ALLEEN in het Nederlands antwoorden. Ook als de gebruiker een andere taal spreekt, begrijp hem maar antwoord ALTIJD in het Nederlands. Geen Engelse woorden.",
+    "cs": "JAZYK: MUSÍŠ odpovídat POUZE česky. I když uživatel mluví jiným jazykem, porozuměj mu ale VŽDY odpovídej česky. Žádná anglická slova.",
+    "ar": "اللغة: يجب أن تجيب باللغة العربية فقط. حتى لو تحدث المستخدم بلغة أخرى، افهمه لكن أجب دائماً بالعربية. لا تستخدم كلمات إنجليزية.",
+    "zh-cn": "语言规则：你必须只用中文回答。即使用户说其他语言，也要理解他们但始终用中文回答。不要使用英文单词。",
+    "zh": "语言规则：你必须只用中文回答。即使用户说其他语言，也要理解他们但始终用中文回答。不要使用英文单词。",
+    "ja": "言語ルール：日本語のみで回答してください。ユーザーが他の言語を話しても、理解した上で必ず日本語で回答してください。英語は使わないでください。",
+    "hu": "NYELV: CSAK magyarul válaszolj. Még ha a felhasználó más nyelven beszél is, értsd meg de MINDIG magyarul válaszolj. Ne használj angol szavakat.",
+    "ko": "언어 규칙: 한국어로만 답변해야 합니다. 사용자가 다른 언어로 말해도 이해하되 항상 한국어로 답변하세요. 영어를 사용하지 마세요.",
 }
 
 # =============================================================================

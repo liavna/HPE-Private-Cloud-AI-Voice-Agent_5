@@ -37,7 +37,7 @@ def db_connection(host, port, dbname, user, password):
 warnings.filterwarnings('ignore', message='.*pandas only supports SQLAlchemy.*')
 
 # Build Metadata
-BUILD_NUMBER = "5.0.0.1001"
+BUILD_NUMBER = "5.0.0"
 
 # === CRITICAL FIX: Patch Audio component BEFORE any usage ===
 def apply_audio_patch():
@@ -3729,10 +3729,12 @@ def create_ui():
                 *   **Customer Context:** Dynamic customer dashboard showing plans, tickets, and invoices.
                 
                 ### 🆕 v5.0.0 Changelog
-                *   **Enhanced Language Support:** Full support for Hebrew, Spanish, French, and all Whisper/XTTS languages.
-                *   **Sentiment Analysis:** Improved multi-language sentiment detection and churn risk alerts.
-                *   **Session Stability:** Fixed "silent agent" issues with unique browser sessions.
-                *   **Database:** Native language responses for account/ticket queries.
+                *   **Audio Stability Fix:** Resolved protocol errors causing "silent agent" and stuttering audio playback.
+                *   **Strict Language Mode:** Prevented English words/numbers from mixing into non-English responses.
+                *   **Universal Sentiment:** Expanded sentiment analysis to support Hebrew, Spanish, French, and English natively.
+                *   **Global Language Support:** Enabled support for all Whisper-compatible languages for input.
+                *   **Session Resilience:** Enhanced browser cache handling to prevent session stalls and connection drops.
+                *   **Database Integration:** Native language database responses and robust connection pooling.
 
                 ### 📋 Quick Start Guide
                 
