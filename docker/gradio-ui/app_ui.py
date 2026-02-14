@@ -2016,7 +2016,7 @@ DEFAULT_CONFIG = {
     "llm_api_key": os.getenv("LLM_API_KEY", ""),
     "llm_model_name": os.getenv("LLM_MODEL_NAME", "meta-llama/Llama-3.2-1B-Instruct"),
     "llm_prompt_template": os.getenv("LLM_PROMPT_TEMPLATE", 'Answer the question: "{transcript}"\n\nAnswer concisely.'),
-    "asr_server_address": os.getenv("ASR_SERVER_ADDRESS", "localhost:50051"),
+    "asr_server_address": os.getenv("ASR_SERVER_ADDRESS", "whisper-large-v3-predictor-00002-deployment.liav-hpe-com-ba9ce2f9.svc.cluster.local:9000"),
     "asr_language_code": "en-US",  # Input is always English (Whisper)
     "tts_server_address": os.getenv("TTS_SERVER_ADDRESS", "localhost:8000"),
     "tts_language_code": os.getenv("TTS_LANGUAGE_CODE", "en"),  # XTTS language code
@@ -2570,16 +2570,22 @@ async def process_audio(
                 # Strip WAV header if present (server might send WAV per sentence)
                 raw_pcm = strip_wav_header(data)
                 audio_buffer.extend(raw_pcm)
-                status_log += f"🎵 Chunk {total_audio_chunks}: {len(raw_pcm):,} bytes | Total: {len(audio_buffer):,}\n"
                 
-                # Throttling: Only yield every 20 chunks to prevent overwhelming the Gradio stream
-                # This fixes 'LocalProtocolError: Too little data for declared Content-Length'
-                if total_audio_chunks % 20 == 0:
+                # IMPORTANT: Immediate playback trigger logic
+                # For very short responses (1 chunk), waiting can cause perceived silence.
+                # However, Gradio streaming needs throttling.
+                # Optimization: Update log less frequently, but ensure data is collected.
+
+                if total_audio_chunks % 10 == 0:
+                    status_log += f"🎵 Receiving audio... ({total_audio_chunks} chunks)\n"
                     yield gr.update(), status_log, gr.update(), gr.update(), gr.update(value=last_perf_html, visible=True), gr.update()
         
+        # Audio generation completed
         if len(audio_buffer) == 0:
-            status_log += "\n❌ ERROR: No audio received (buffer empty).\n"
-            status_log += f"📊 Chunks received: {total_audio_chunks}\n"
+            # Check if this was an error case (usually signaled by status update earlier)
+            if "Error" not in status_log:
+                status_log += "\n⚠️ Warning: Response generated but no audio content received.\n"
+
             print(f"[UI_DEBUG] Session {session_id[:8]} - Empty buffer")
             yield gr.update(), status_log, gr.update(), gr.update(), gr.update(value=last_perf_html, visible=True), gr.update()
             return
