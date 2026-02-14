@@ -511,6 +511,11 @@ NEGATIVE_SENTIMENT_KEYWORDS = {
         'dhokha', 'scam', 'faltu', 'samay ki barbadi', 'thak gaya',
         'sharm', 'kabhi nahi', 'kharab', 'dheema', 'gandi service',
         'kaam nahi kar raha', 'chhod raha hu', 'band karo',
+        # Devanagari
+        'गुस्सा', 'नाराज़', 'निराश', 'बेकार', 'सबसे बुरा', 'नफरत',
+        'रद्द', 'वापस', 'शिकायत', 'मैनेजर', 'वकील', 'धोखा', 'घोटाला',
+        'फालतू', 'समय की बर्बादी', 'थक गया', 'शर्म', 'कभी नहीं',
+        'खराब', 'धीमा', 'गंदी सर्विस', 'काम नहीं कर रहा', 'छोड़ रहा हूं', 'बंद करो'
     ]
 }
 
@@ -607,7 +612,10 @@ CHURN_INDICATORS = {
     ],
     'hi': [
         'sadasyata radd', 'khata band', 'switch', 'khatam',
-        'mehenga', 'bekaar', 'barbaad', 'band karo'
+        'mehenga', 'bekaar', 'barbaad', 'band karo',
+        # Devanagari
+        'सदस्यता रद्द', 'खाता बंद', 'स्विच', 'खत्म',
+        'महंगा', 'बेकार', 'बरबाद', 'बंद करो'
     ],
 }
 
@@ -2117,7 +2125,7 @@ def analyze_sentiment(text, language='en', conversation_history=None):
     # 2. Check EXTENDED NEGATIVE KEYWORDS (Medium Priority)
     # Check both specific language and English
     neg_lists = [NEGATIVE_SENTIMENT_KEYWORDS.get(lang_code, []), NEGATIVE_SENTIMENT_KEYWORDS.get('en', [])]
-    
+
     for lst in neg_lists:
         for phrase in lst:
             if phrase.lower() in text_lower and phrase not in trigger_phrases:
@@ -2178,6 +2186,27 @@ def detect_query_type(text):
     """Detect what type of information the user is asking about"""
     text_lower = text.lower()
     
+    # Bug Fix: "How many open tickets" was triggering "create_ticket" due to "open ticket" keyword.
+    # We must prioritize status queries over creation commands when ambiguity exists.
+
+    # Indicators that suggest a query/question rather than a command
+    query_indicators = [
+        'how many', 'list', 'show', 'check', 'status', 'what are', 'do i have', 'any',
+        'כמה', 'רשימת', 'הראה', 'בדוק', 'סטטוס', 'מה הם', 'האם יש לי', 'כמה'
+    ]
+
+    # Check for "open ticket" overlap
+    ambiguous_phrases = [
+        'open ticket', 'open tickets', 'tickets open',
+        'כרטיס פתוח', 'קריאה פתוחה', 'טיקט פתוח', 'קריאות פתוחות', 'כרטיסים פתוחים'
+    ]
+
+    # If phrase contains "open ticket" AND a query indicator -> It's a 'tickets' query (view)
+    if any(phrase in text_lower for phrase in ambiguous_phrases):
+        if any(indicator in text_lower for indicator in query_indicators):
+            logging.info("[Intent] Disambiguated 'open ticket' as query (tickets) due to query indicator")
+            return 'tickets'
+
     for query_type, triggers in QUERY_TRIGGERS.items():
         for trigger in triggers:
             if trigger in text_lower:
@@ -2220,6 +2249,64 @@ def is_cancellation(text):
 
 
 # =============================================================================
+# DB TERM TRANSLATIONS - Avoid mixing English status terms in foreign sentences
+# =============================================================================
+DB_TERM_TRANSLATIONS = {
+    'en': {
+        'active': 'active', 'suspended': 'suspended', 'cancelled': 'cancelled',
+        'pending': 'pending', 'paid': 'paid', 'overdue': 'overdue',
+        'open': 'open', 'resolved': 'resolved', 'closed': 'closed', 'in_progress': 'in progress',
+        'low': 'low', 'medium': 'medium', 'high': 'high', 'urgent': 'urgent',
+        'email': 'email', 'phone': 'phone', 'priority': 'priority'
+    },
+    'es': {
+        'active': 'activo', 'suspended': 'suspendido', 'cancelled': 'cancelado',
+        'pending': 'pendiente', 'paid': 'pagado', 'overdue': 'vencido',
+        'open': 'abierto', 'resolved': 'resuelto', 'closed': 'cerrado', 'in_progress': 'en progreso',
+        'low': 'baja', 'medium': 'media', 'high': 'alta', 'urgent': 'urgente',
+        'email': 'correo', 'phone': 'teléfono', 'priority': 'prioridad'
+    },
+    'fr': {
+        'active': 'actif', 'suspended': 'suspendu', 'cancelled': 'annulé',
+        'pending': 'en attente', 'paid': 'payé', 'overdue': 'en retard',
+        'open': 'ouvert', 'resolved': 'résolu', 'closed': 'fermé', 'in_progress': 'en cours',
+        'low': 'basse', 'medium': 'moyenne', 'high': 'haute', 'urgent': 'urgente',
+        'email': 'email', 'phone': 'téléphone', 'priority': 'priorité'
+    },
+    'de': {
+        'active': 'aktiv', 'suspended': 'ausgesetzt', 'cancelled': 'gekündigt',
+        'pending': 'ausstehend', 'paid': 'bezahlt', 'overdue': 'überfällig',
+        'open': 'offen', 'resolved': 'gelöst', 'closed': 'geschlossen', 'in_progress': 'in bearbeitung',
+        'low': 'niedrig', 'medium': 'mittel', 'high': 'hoch', 'urgent': 'dringend',
+        'email': 'email', 'phone': 'telefon', 'priority': 'priorität'
+    },
+    'it': {
+        'active': 'attivo', 'suspended': 'sospeso', 'cancelled': 'cancellato',
+        'pending': 'in attesa', 'paid': 'pagato', 'overdue': 'scaduto',
+        'open': 'aperto', 'resolved': 'risolto', 'closed': 'chiuso', 'in_progress': 'in corso',
+        'low': 'bassa', 'medium': 'media', 'high': 'alta', 'urgent': 'urgente',
+        'email': 'email', 'phone': 'telefono', 'priority': 'priorità'
+    },
+    'pt': {
+        'active': 'ativo', 'suspended': 'suspenso', 'cancelled': 'cancelado',
+        'pending': 'pendente', 'paid': 'pago', 'overdue': 'vencido',
+        'open': 'aberto', 'resolved': 'resolvido', 'closed': 'fechado', 'in_progress': 'em andamento',
+        'low': 'baixa', 'medium': 'média', 'high': 'alta', 'urgent': 'urgente',
+        'email': 'email', 'phone': 'telefone', 'priority': 'prioridade'
+    },
+}
+
+def translate_db_term(term, lang):
+    """Translate database terms (status, priority) to target language"""
+    if not term: return ""
+    term_lower = str(term).lower()
+    # Normalize lang code
+    lang_code = lang.split('-')[0].lower()
+
+    translations = DB_TERM_TRANSLATIONS.get(lang_code, DB_TERM_TRANSLATIONS['en'])
+    return translations.get(term_lower, term)  # Fallback to original if not found
+
+# =============================================================================
 # RESPONSE FORMATTERS - Natural language for voice (multi-language)
 # =============================================================================
 def format_query_results(query_type, results, customer_name=None, lang="en"):
@@ -2232,15 +2319,16 @@ def format_query_results(query_type, results, customer_name=None, lang="en"):
     if query_type == 'subscription':
         r = results[0]
         status = r.get('status', 'unknown')
+        # Translate status
+        status_tr = translate_db_term(status, lang)
+
         plan = r.get('plan_name', 'your plan')
         price = r.get('price', 0)
-        # Use simple boolean for template logic if needed, or pre-format
-        # For multi-lang, we pass the raw values or simple indicators
         
         if status == 'active':
             return get_natural_response('sub_active', lang=lang, plan=plan, name=name, price=price)
         else:
-            return get_natural_response('sub_status', lang=lang, plan=plan, status=status)
+            return get_natural_response('sub_status', lang=lang, plan=plan, status=status_tr)
     
     elif query_type == 'balance':
         r = results[0]
@@ -2259,11 +2347,12 @@ def format_query_results(query_type, results, customer_name=None, lang="en"):
         latest = results[0]
         amount = latest.get('amount', 0)
         status = latest.get('status', 'unknown')
+        status_tr = translate_db_term(status, lang)
         
         if count == 1:
-            return get_natural_response('invoice_one', lang=lang, amount=amount, status=status)
+            return get_natural_response('invoice_one', lang=lang, amount=amount, status=status_tr)
         else:
-            return get_natural_response('invoice_many', lang=lang, count=count, amount=amount, status=status)
+            return get_natural_response('invoice_many', lang=lang, count=count, amount=amount, status=status_tr)
     
     elif query_type == 'plan':
         r = results[0]
@@ -2271,6 +2360,8 @@ def format_query_results(query_type, results, customer_name=None, lang="en"):
         price = r.get('price', 0)
         data = r.get('data_limit_gb', 'unlimited')
         support = r.get('support_level', 'standard')
+        # Translate support level if it matches a term
+        support = translate_db_term(support, lang)
         
         return get_natural_response('plan_details', lang=lang, name=name_plan, price=price, data=data, support=support)
     
@@ -2783,6 +2874,13 @@ async def synthesize_with_xtts(text: str, settings: dict, max_retries: int = 2) 
                         return audio_data
                     else:
                          logging.warning("[TTS] Received empty audio body")
+
+                # Fallback for 400 Bad Request (likely invalid speaker)
+                elif response.status_code == 400 and payload.get("speaker") and payload["speaker"] != "default":
+                    logging.warning(f"[TTS] 400 Error with speaker '{speaker}'. Retrying with 'default'...")
+                    payload.pop("speaker", None)
+                    # Retry immediately without incrementing attempt count heavily
+                    continue
                 else:
                     logging.warning(f"[TTS] Failed: {response.status_code}")
                     
@@ -2803,11 +2901,11 @@ async def synthesize_with_xtts(text: str, settings: dict, max_retries: int = 2) 
     return b""
 
 
-async def stream_tts_for_sentence(websocket, text_to_synthesize, stream_start_time, metrics, settings: dict):
-    """Synthesize and stream TTS for a sentence"""
+async def stream_tts_for_sentence(websocket, text_to_synthesize, stream_start_time, metrics, settings: dict) -> bool:
+    """Synthesize and stream TTS for a sentence. Returns True if audio sent."""
     text_to_synthesize = clean_tts_text(text_to_synthesize)
     if not text_to_synthesize:
-        return
+        return False
     
     logging.info(f"[TTS Task] Synthesizing: \"{text_to_synthesize[:50]}...\"")
     
@@ -2825,9 +2923,13 @@ async def stream_tts_for_sentence(websocket, text_to_synthesize, stream_start_ti
                 chunk = audio_data[i:i + chunk_size]
                 metrics['llm_tts_metrics']['tts_chunk_latencies'].append(time.time() - stream_start_time)
                 await websocket.send(chunk)
+
+            return True
                 
     except Exception as e:
         logging.error(f"[TTS Task] Error: {e}")
+
+    return False
 
 
 # =============================================================================
@@ -3554,9 +3656,18 @@ async def main_pipeline(websocket, audio_bytes: bytes, settings: dict, session_i
                 await task
 
         # Safe gather for TTS tasks
+        audio_sent = False
         if tts_tasks:
-            await asyncio.gather(*tts_tasks, return_exceptions=True)
+            results = await asyncio.gather(*tts_tasks, return_exceptions=True)
+            for res in results:
+                if res is True:
+                    audio_sent = True
         
+        # Fallback if text generated but no audio (silent failure)
+        if full_response and not audio_sent:
+            logging.error("[TTS] Critical: Text generated but NO audio sent!")
+            await websocket.send("Error: Voice generation failed. Please check TTS server.")
+
         # Save response to history
         if conversation:
             conversation.add_message("assistant", full_response)

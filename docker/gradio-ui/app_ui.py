@@ -1881,10 +1881,6 @@ TTS_LANGUAGES = {
         "display_name": "🇺🇸 English",
         "response_instruction": "\n\nLANGUAGE RULE: You MUST respond ONLY in English. Even if the user speaks Hebrew, Arabic, or another language - understand them but ALWAYS reply in natural, conversational English.",
     },
-    "he": {
-        "display_name": "🇮🇱 Hebrew",
-        "response_instruction": "\n\nחוק שפה: עליך לענות אך ורק בעברית. גם אם המשתמש מדבר בשפה אחרת, תבין אותו אך תענה תמיד בעברית טבעית ושיחתית.",
-    },
     "es": {
         "display_name": "🇪🇸 Spanish",
         "response_instruction": "\n\nREGLA DE IDIOMA: DEBES responder SOLAMENTE en español. Aunque el usuario hable otro idioma, entiéndelo pero SIEMPRE responde en español natural y conversacional.",
@@ -1944,6 +1940,10 @@ TTS_LANGUAGES = {
     "ko": {
         "display_name": "🇰🇷 Korean",
         "response_instruction": "\n\n언어 규칙: 한국어로만 답변해야 합니다. 사용자가 다른 언어로 말해도 이해하되 항상 자연스러운 대화체 한국어로 답변하세요.",
+    },
+    "hi": {
+        "display_name": "🇮🇳 Hindi",
+        "response_instruction": "\n\nLANGUAGE RULE: You MUST respond ONLY in Hindi. Even if the user speaks another language, understand them but ALWAYS reply in natural, conversational Hindi.",
     },
 }
 
@@ -3221,6 +3221,7 @@ def create_ui():
                             # French Male
                             "Adde Michal",         # 🇫🇷 French - Elegant
                             "Filip Traverse",      # 🇫🇷 French - Professional
+                            "Fabien Rosen",        # 🇫🇷 French - Casual
                             # Spanish Male
                             "Ferran Sansen",       # 🇪🇸 Spanish/Catalan - Warm
                             "Dionisio Schuyler",   # 🇪🇸 Spanish - Professional
@@ -3317,10 +3318,6 @@ def create_ui():
                                 "female": ["Chandra MacFarland", "Asya Anara", "Ige Behringer"],
                                 "male": ["Kumar Dahl", "Badr Odhiambo", "Suad Qasim"]
                             },
-                            "he": {
-                                "female": ["Daisy Studious", "Gracie Wise"],
-                                "male": ["Viktor Eka", "Andrew Chipper"]
-                            }
                         }
                         
                         # Function to get voices for a language (combined male + female)
