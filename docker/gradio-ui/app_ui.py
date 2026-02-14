@@ -1893,6 +1893,10 @@ TTS_LANGUAGES = {
         "display_name": "🇺🇸 English",
         "response_instruction": "\n\nLANGUAGE RULE: You MUST respond ONLY in English. Even if the user speaks Hebrew, Arabic, or another language - understand them but ALWAYS reply in natural, conversational English.",
     },
+    "he": {
+        "display_name": "🇮🇱 Hebrew (עברית)",
+        "response_instruction": "\n\nLANGUAGE RULE: You MUST respond ONLY in Hebrew. Even if the user speaks English or another language - understand them but ALWAYS reply in natural, conversational Hebrew.",
+    },
     "es": {
         "display_name": "🇪🇸 Spanish",
         "response_instruction": "\n\nREGLA DE IDIOMA: DEBES responder SOLAMENTE en español. Aunque el usuario hable otro idioma, entiéndelo pero SIEMPRE responde en español natural y conversacional.",
@@ -2510,6 +2514,12 @@ async def process_audio(
         status_log += f"🗄️ Database: {db_name}@{db_host}\n"
     status_log += "=" * 50 + "\n\n"
     
+    # Helper to prevent massive logs causing websocket crashes
+    def truncate_log(log_text, max_chars=8000):
+        if len(log_text) > max_chars:
+            return "..." + log_text[-(max_chars):]
+        return log_text
+
     # FIX v3.1.22: Use global cache for persistent customer info (survives across function calls)
     current_customer_info = get_customer_info(session_id)
     
@@ -2543,6 +2553,7 @@ async def process_audio(
                 break
             elif event_type == "status":
                 status_log += f"{data}\n"
+                status_log = truncate_log(status_log)
                 yield gr.update(), status_log, gr.update(), gr.update(), gr.update(value=last_perf_html, visible=True), gr.update()
             
             elif event_type == "customer_info":
@@ -2555,6 +2566,7 @@ async def process_audio(
                     status_log += f"   📱 Phone: {data.get('phone', 'N/A')}\n"
                     status_log += f"   🎫 Open Tickets: {data.get('open_tickets', 0)}\n"
                     status_log += f"   💰 Overdue Invoices: {data.get('overdue_invoices', 0)}\n"
+                    status_log = truncate_log(status_log)
                     # FIX v3.1.22: ONLY update customer_info_display HERE when customer is first identified!
                     yield gr.update(), status_log, gr.update(), gr.update(value=format_customer_info_html(current_customer_info)), gr.update(value=last_perf_html, visible=True), gr.update()
                 else:
@@ -2583,14 +2595,8 @@ async def process_audio(
                 raw_pcm = strip_wav_header(data)
                 audio_buffer.extend(raw_pcm)
                 
-                # IMPORTANT: Immediate playback trigger logic
-                # For very short responses (1 chunk), waiting can cause perceived silence.
-                # However, Gradio streaming needs throttling.
-                # Optimization: Update log less frequently, but ensure data is collected.
-
-                if total_audio_chunks % 10 == 0:
-                    status_log += f"🎵 Receiving audio... ({total_audio_chunks} chunks)\n"
-                    yield gr.update(), status_log, gr.update(), gr.update(), gr.update(value=last_perf_html, visible=True), gr.update()
+                # OPTIMIZATION: Removed intermediate yields to prevent flooding the ASGI connection
+                # This prevents "h11._util.LocalProtocolError: Too little data" errors
         
         # Audio generation completed
         if len(audio_buffer) == 0:
@@ -2647,6 +2653,9 @@ async def process_audio(
             
             print(f"[UI_DEBUG] Session {session_id[:8]} - FINAL YIELD - HTML")
             
+            # Flush event loop before final huge payload
+            await asyncio.sleep(0.05)
+
             # Return filepath - Gradio will serve this correctly
             # Harden the update: force visible=True and explicit value
             final_metrics_update = gr.update(value=last_perf_html, visible=True)
@@ -3272,6 +3281,10 @@ def create_ui():
                                 "female": ["Daisy Studious", "Gracie Wise", "Nova Hogarth", "Ana Florence", "Sofia Hellen", "Brenda Stern"],
                                 "male": ["Andrew Chipper", "Craig Gutsy", "Damien Black", "Viktor Eka", "Abrahan Mack", "Gilberto Mathias"]
                             },
+                            "he": {
+                                "female": ["Daisy Studious", "Gracie Wise"],
+                                "male": ["Andrew Chipper", "Viktor Eka"]
+                            },
                             "es": {
                                 "female": ["Alma María", "Roziya Estella", "Uta Obando"],
                                 "male": ["Luis Moray", "Dionisio Schuyler", "Ferran Sansen", "Marcos Rudaski"]
@@ -3689,7 +3702,7 @@ def create_ui():
                     """)
             
             with gr.TabItem("ℹ️ About"):
-                gr.Markdown("""
+                gr.Markdown(f"""
                 ## 🎙️ AI Voice Agent v5.0.0
                 
                 **End-to-end voice AI solution powered by HPE Private Cloud AI**
@@ -3701,15 +3714,13 @@ def create_ui():
                 ---
                 
                 ### 🔄 Pipeline Architecture
-                ```mermaid
-                graph LR
-                    A[🎤 Voice Input] --> B(Whisper ASR)
-                    B --> C{Intent & Sentiment}
-                    C --> D[LLM Intelligence]
-                    C --> E[(PostgreSQL DB)]
-                    D --> F(XTTS v2)
-                    F --> G[🔊 Audio Response]
-                ```
+
+                **Pipeline Flow:**
+                1. **Voice Input** 🎤 → Whisper ASR
+                2. **ASR** → Intent & Sentiment Analysis
+                3. **Analysis** → LLM Intelligence + PostgreSQL DB
+                4. **LLM** → XTTS v2
+                5. **XTTS** → **Audio Response** 🔊
                 
                 ### 🛠️ Key Features
                 
