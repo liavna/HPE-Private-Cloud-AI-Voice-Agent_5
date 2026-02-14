@@ -5266,8 +5266,8 @@ def create_ui():
                             console.log('[Audio] Loading:', uniqueUrl);
                             audioPlayer.load();
                             
-                            // Small delay to ensure load starts
-                            setTimeout(() => {
+                            // Robust playback handler with retry
+                            const attemptPlay = (retries = 3) => {
                                 const playPromise = audioPlayer.play();
                                 if (playPromise !== undefined) {
                                     playPromise.then(_ => {
@@ -5275,10 +5275,31 @@ def create_ui():
                                         if (audioStatus) audioStatus.textContent = '🔊 Playing...';
                                     }).catch(error => {
                                         console.error('[Audio] Play error:', error);
-                                        if (audioStatus) audioStatus.textContent = '⚠️ Click to play (Autoplay blocked)';
+                                        if (retries > 0 && error.name === 'NotAllowedError') {
+                                            // Autoplay blocked - show UI hint
+                                            if (audioStatus) audioStatus.textContent = '⚠️ Click play button (Browser blocked autoplay)';
+                                        } else if (retries > 0) {
+                                            // Other errors (not ready etc), retry
+                                            console.log(`[Audio] Retrying playback (${retries} left)...`);
+                                            setTimeout(() => attemptPlay(retries - 1), 300);
+                                        } else {
+                                            if (audioStatus) audioStatus.textContent = '❌ Playback failed - click play';
+                                        }
                                     });
                                 }
-                            }, 100);
+                            };
+
+                            // Wait for 'canplay' event or timeout
+                            audioPlayer.oncanplay = () => {
+                                console.log('[Audio] Can play event fired');
+                                attemptPlay();
+                                audioPlayer.oncanplay = null; // Clean up
+                            };
+
+                            // Fallback if event doesn't fire
+                            setTimeout(() => {
+                                if (audioPlayer.paused) attemptPlay();
+                            }, 500);
                         }
                     }
                 };
