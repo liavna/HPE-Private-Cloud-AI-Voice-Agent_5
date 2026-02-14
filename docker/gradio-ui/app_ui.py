@@ -529,6 +529,7 @@ def get_extended_customer_info(db_conn, customer_id: int) -> dict:
 # =====================================================
 INIT_TABLES_SQL = """
 -- Drop tables if exist (only these specific tables)
+DROP TABLE IF EXISTS conversation_sessions CASCADE;
 DROP TABLE IF EXISTS sentiment_alerts CASCADE;
 DROP TABLE IF EXISTS upgrade_requests CASCADE;
 DROP TABLE IF EXISTS support_tickets CASCADE;
@@ -638,6 +639,14 @@ CREATE TABLE sentiment_alerts (
     resolved_at TIMESTAMP,
     resolved_by VARCHAR(255),
     resolution_notes TEXT
+);
+
+-- Conversation sessions table (for persistence)
+CREATE TABLE conversation_sessions (
+    session_id VARCHAR(255) PRIMARY KEY,
+    customer_id INTEGER,
+    data JSONB,
+    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 """
 
@@ -5188,9 +5197,28 @@ def create_ui():
                     }, 500);
                 });
                 
+                // Retry logic for audio errors
+                let retryCount = 0;
+
                 audioPlayer.addEventListener('error', (e) => {
                     console.error('[Audio] Error:', e);
-                    if (audioStatus) audioStatus.textContent = '❌ Audio error';
+                    if (audioStatus) audioStatus.textContent = '❌ Audio error (Retrying...)';
+
+                    // Attempt retry twice
+                    if (retryCount < 2 && audioPlayer.src) {
+                        retryCount++;
+                        console.log('[Audio] Retrying playback (' + retryCount + '/2)...');
+                        // Add cache buster
+                        const cleanSrc = audioPlayer.src.split('&retry=')[0];
+                        const separator = cleanSrc.includes('?') ? '&' : '?';
+                        audioPlayer.src = cleanSrc + separator + 'retry=' + Date.now();
+                        setTimeout(() => {
+                            audioPlayer.load();
+                            audioPlayer.play().catch(err => console.error('Retry play failed', err));
+                        }, 500);
+                    } else {
+                        if (audioStatus) audioStatus.textContent = '❌ Audio error (Failed)';
+                    }
                 });
                 
                 // Find the hidden textbox with audio data
@@ -5209,6 +5237,7 @@ def create_ui():
                         // Compare with the raw value from the textbox to detect changes
                         if (audioPlayer.dataset.lastRawValue !== holder.value) {
                             console.log('[Audio] New audio input detected:', holder.value);
+                            retryCount = 0; // Reset retry count for new file
                             
                             // Add timestamp to prevent browser caching
                             const uniqueUrl = audioUrl + (audioUrl.includes('?') ? '&' : '?') + 't=' + Date.now();
@@ -5232,13 +5261,13 @@ def create_ui():
                                         if (audioStatus) audioStatus.textContent = '⚠️ Click to play (Autoplay blocked)';
                                     });
                                 }
-                            }, 50);
+                            }, 100);
                         }
                     }
                 };
                 
-                // Check periodically for new audio
-                setInterval(checkForAudioData, 500);
+                // Check periodically for new audio (faster polling)
+                setInterval(checkForAudioData, 250);
                 
                 // Also observe for changes
                 const observer = new MutationObserver((mutations) => {

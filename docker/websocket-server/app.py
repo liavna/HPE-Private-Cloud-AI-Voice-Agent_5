@@ -2049,7 +2049,19 @@ class DatabaseManager:
                 await connection.execute(query, session_id, customer_id, json.dumps(data))
                 return True
         except Exception as e:
-            logging.error(f"[DB] Failed to save session: {e}")
+            # Self-healing: If table missing, create it and retry
+            if "relation \"conversation_sessions\" does not exist" in str(e):
+                logging.warning("[DB] Session table missing, attempting to create...")
+                await self._initialize_session_storage_table()
+                try:
+                    async with self.pool.acquire() as connection:
+                        await connection.execute(query, session_id, customer_id, json.dumps(data))
+                    logging.info("[DB] Session saved after table creation")
+                    return True
+                except Exception as e2:
+                    logging.error(f"[DB] Failed to save session after retry: {e2}")
+            else:
+                logging.error(f"[DB] Failed to save session: {e}")
             return False
 
     async def load_session(self, session_id):
@@ -2393,6 +2405,34 @@ DB_TERM_TRANSLATIONS = {
         'open': 'aberto', 'resolved': 'resolvido', 'closed': 'fechado', 'in_progress': 'em andamento',
         'low': 'baixa', 'medium': 'média', 'high': 'alta', 'urgent': 'urgente',
         'email': 'email', 'phone': 'telefone', 'priority': 'prioridade'
+    },
+    'he': {
+        'active': 'פעיל', 'suspended': 'מושהה', 'cancelled': 'מבוטל',
+        'pending': 'ממתין', 'paid': 'שולם', 'overdue': 'בפיגור',
+        'open': 'פתוח', 'resolved': 'נפתר', 'closed': 'סגור', 'in_progress': 'בטיפול',
+        'low': 'נמוכה', 'medium': 'בינונית', 'high': 'גבוהה', 'urgent': 'דחופה',
+        'email': 'אימייל', 'phone': 'טלפון', 'priority': 'עדיפות'
+    },
+    'ar': {
+        'active': 'نشط', 'suspended': 'معلق', 'cancelled': 'ملغى',
+        'pending': 'قيد الانتظار', 'paid': 'مدفوع', 'overdue': 'متأخر',
+        'open': 'مفتوح', 'resolved': 'تم حله', 'closed': 'مغلق', 'in_progress': 'قيد التنفيذ',
+        'low': 'منخفضة', 'medium': 'متوسطة', 'high': 'عالية', 'urgent': 'عاجلة',
+        'email': 'البريد الإلكتروني', 'phone': 'الهاتف', 'priority': 'الأولوية'
+    },
+    'ru': {
+        'active': 'активен', 'suspended': 'приостановлен', 'cancelled': 'отменен',
+        'pending': 'ожидает', 'paid': 'оплачен', 'overdue': 'просрочен',
+        'open': 'открыт', 'resolved': 'решен', 'closed': 'закрыт', 'in_progress': 'в процессе',
+        'low': 'низкий', 'medium': 'средний', 'high': 'высокий', 'urgent': 'срочный',
+        'email': 'email', 'phone': 'телефон', 'priority': 'приоритет'
+    },
+    'tr': {
+        'active': 'aktif', 'suspended': 'askıya alındı', 'cancelled': 'iptal edildi',
+        'pending': 'beklemede', 'paid': 'ödendi', 'overdue': 'gecikmiş',
+        'open': 'açık', 'resolved': 'çözüldü', 'closed': 'kapalı', 'in_progress': 'devam ediyor',
+        'low': 'düşük', 'medium': 'orta', 'high': 'yüksek', 'urgent': 'acil',
+        'email': 'eposta', 'phone': 'telefon', 'priority': 'öncelik'
     },
 }
 
