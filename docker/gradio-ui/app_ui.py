@@ -3714,15 +3714,13 @@ def create_ui():
                 ---
                 
                 ### 🔄 Pipeline Architecture
-                ```mermaid
-                graph LR
-                    A[🎤 Voice Input] --> B(Whisper ASR)
-                    B --> C{Intent & Sentiment}
-                    C --> D[LLM Intelligence]
-                    C --> E[(PostgreSQL DB)]
-                    D --> F(XTTS v2)
-                    F --> G[🔊 Audio Response]
-                ```
+
+                **Pipeline Flow:**
+                1. **Voice Input** 🎤 → Whisper ASR
+                2. **ASR** → Intent & Sentiment Analysis
+                3. **Analysis** → LLM Intelligence + PostgreSQL DB
+                4. **LLM** → XTTS v2
+                5. **XTTS** → **Audio Response** 🔊
                 
                 ### 🛠️ Key Features
                 
