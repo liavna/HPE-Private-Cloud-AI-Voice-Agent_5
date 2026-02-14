@@ -77,6 +77,7 @@ async def get_http_client() -> httpx.AsyncClient:
             
         # Disable HTTP/2 to prevent 'h11' protocol errors with some TTS servers
         _http_client = httpx.AsyncClient(
+            verify=False,
             timeout=httpx.Timeout(60.0, connect=10.0),
             limits=httpx.Limits(max_keepalive_connections=20, max_connections=50),
             http2=False
