@@ -37,7 +37,7 @@ def db_connection(host, port, dbname, user, password):
 warnings.filterwarnings('ignore', message='.*pandas only supports SQLAlchemy.*')
 
 # Build Metadata
-BUILD_NUMBER = "5.0.0"
+BUILD_NUMBER = "5.0.3"
 
 # === CRITICAL FIX: Patch Audio component BEFORE any usage ===
 def apply_audio_patch():
@@ -2877,11 +2877,11 @@ def create_ui():
         block_background_fill="white"
     )
     
-    with gr.Blocks(title="HPE AI Voice Agent v5.0.0", theme=modern_theme, css=custom_css) as demo:
+    with gr.Blocks(title="HPE AI Voice Agent v5.0.3", theme=modern_theme, css=custom_css) as demo:
         
         gr.Markdown("""
         # 🎙️ AI Voice Agent
-        ### Powered by HPE Private Cloud AI | v5.0.0
+        ### Powered by HPE Private Cloud AI | v5.0.3
         
         **Interaction Modes:**
         - **Push-to-Talk**: Record → Click Send → Listen to response
@@ -3703,7 +3703,7 @@ def create_ui():
             
             with gr.TabItem("ℹ️ About"):
                 gr.Markdown(f"""
-                ## 🎙️ AI Voice Agent v5.0.0
+                ## 🎙️ AI Voice Agent v5.0.3
                 
                 **End-to-end voice AI solution powered by HPE Private Cloud AI**
                 
@@ -3739,13 +3739,12 @@ def create_ui():
                 *   **Performance Metrics:** Latency tracking for ASR, LLM, and TTS generation.
                 *   **Customer Context:** Dynamic customer dashboard showing plans, tickets, and invoices.
                 
-                ### 🆕 v5.0.0 Changelog
-                *   **Audio Stability Fix:** Resolved protocol errors causing "silent agent" and stuttering audio playback.
-                *   **Strict Language Mode:** Prevented English words/numbers from mixing into non-English responses.
-                *   **Universal Sentiment:** Expanded sentiment analysis to support Hebrew, Spanish, French, and English natively.
-                *   **Global Language Support:** Enabled support for all Whisper-compatible languages for input.
-                *   **Session Resilience:** Enhanced browser cache handling to prevent session stalls and connection drops.
-                *   **Database Integration:** Native language database responses and robust connection pooling.
+                ### 🆕 v5.0.3 Changelog
+                *   **Critical Stability Fix:** Resolved 'Silent Agent' issues by optimizing audio buffering and fixing ASGI protocol errors.
+                *   **Backend Robustness:** Forced HTTP/1.1 for internal communications to prevent framing errors.
+                *   **Startup Fix:** Resolved UI crash related to diagram rendering.
+                *   **Performance:** Improved session handling and logging efficiency.
+                *   **Language & Sentiment:** Strict enforcement of output language and expanded sentiment detection.
 
                 ### 📋 Quick Start Guide
                 
@@ -5267,8 +5266,8 @@ def create_ui():
                             console.log('[Audio] Loading:', uniqueUrl);
                             audioPlayer.load();
                             
-                            // Small delay to ensure load starts
-                            setTimeout(() => {
+                            // Robust playback handler with retry
+                            const attemptPlay = (retries = 3) => {
                                 const playPromise = audioPlayer.play();
                                 if (playPromise !== undefined) {
                                     playPromise.then(_ => {
@@ -5276,10 +5275,31 @@ def create_ui():
                                         if (audioStatus) audioStatus.textContent = '🔊 Playing...';
                                     }).catch(error => {
                                         console.error('[Audio] Play error:', error);
-                                        if (audioStatus) audioStatus.textContent = '⚠️ Click to play (Autoplay blocked)';
+                                        if (retries > 0 && error.name === 'NotAllowedError') {
+                                            // Autoplay blocked - show UI hint
+                                            if (audioStatus) audioStatus.textContent = '⚠️ Click play button (Browser blocked autoplay)';
+                                        } else if (retries > 0) {
+                                            // Other errors (not ready etc), retry
+                                            console.log(`[Audio] Retrying playback (${retries} left)...`);
+                                            setTimeout(() => attemptPlay(retries - 1), 300);
+                                        } else {
+                                            if (audioStatus) audioStatus.textContent = '❌ Playback failed - click play';
+                                        }
                                     });
                                 }
-                            }, 100);
+                            };
+
+                            // Wait for 'canplay' event or timeout
+                            audioPlayer.oncanplay = () => {
+                                console.log('[Audio] Can play event fired');
+                                attemptPlay();
+                                audioPlayer.oncanplay = null; // Clean up
+                            };
+
+                            // Fallback if event doesn't fire
+                            setTimeout(() => {
+                                if (audioPlayer.paused) attemptPlay();
+                            }, 500);
                         }
                     }
                 };
@@ -5673,7 +5693,7 @@ def create_ui():
     return demo
 
 if __name__ == "__main__":
-    print(f"Starting Voice Agent v5.0.0 (Build {BUILD_NUMBER}) - Improved Language Support, Sentiment Analysis, Session Stability...")
+    print(f"Starting Voice Agent v5.0.3 (Build {BUILD_NUMBER}) - Improved Language Support, Sentiment Analysis, Session Stability...")
     demo = create_ui()
     demo.queue()
     demo.launch(server_name="0.0.0.0", server_port=8080, show_error=True)
