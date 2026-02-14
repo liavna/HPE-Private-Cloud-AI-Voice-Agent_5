@@ -2514,6 +2514,12 @@ async def process_audio(
         status_log += f"🗄️ Database: {db_name}@{db_host}\n"
     status_log += "=" * 50 + "\n\n"
     
+    # Helper to prevent massive logs causing websocket crashes
+    def truncate_log(log_text, max_chars=8000):
+        if len(log_text) > max_chars:
+            return "..." + log_text[-(max_chars):]
+        return log_text
+
     # FIX v3.1.22: Use global cache for persistent customer info (survives across function calls)
     current_customer_info = get_customer_info(session_id)
     
@@ -2547,6 +2553,7 @@ async def process_audio(
                 break
             elif event_type == "status":
                 status_log += f"{data}\n"
+                status_log = truncate_log(status_log)
                 yield gr.update(), status_log, gr.update(), gr.update(), gr.update(value=last_perf_html, visible=True), gr.update()
             
             elif event_type == "customer_info":
@@ -2559,6 +2566,7 @@ async def process_audio(
                     status_log += f"   📱 Phone: {data.get('phone', 'N/A')}\n"
                     status_log += f"   🎫 Open Tickets: {data.get('open_tickets', 0)}\n"
                     status_log += f"   💰 Overdue Invoices: {data.get('overdue_invoices', 0)}\n"
+                    status_log = truncate_log(status_log)
                     # FIX v3.1.22: ONLY update customer_info_display HERE when customer is first identified!
                     yield gr.update(), status_log, gr.update(), gr.update(value=format_customer_info_html(current_customer_info)), gr.update(value=last_perf_html, visible=True), gr.update()
                 else:
@@ -2645,6 +2653,9 @@ async def process_audio(
             
             print(f"[UI_DEBUG] Session {session_id[:8]} - FINAL YIELD - HTML")
             
+            # Flush event loop before final huge payload
+            await asyncio.sleep(0.05)
+
             # Return filepath - Gradio will serve this correctly
             # Harden the update: force visible=True and explicit value
             final_metrics_update = gr.update(value=last_perf_html, visible=True)
