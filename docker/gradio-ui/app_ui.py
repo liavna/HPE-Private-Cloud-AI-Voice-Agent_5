@@ -36,6 +36,9 @@ def db_connection(host, port, dbname, user, password):
 # Suppress pandas SQLAlchemy warning (we use psycopg2 directly, which works fine)
 warnings.filterwarnings('ignore', message='.*pandas only supports SQLAlchemy.*')
 
+# Build Metadata
+BUILD_NUMBER = "5.0.0.1001"
+
 # === CRITICAL FIX: Patch Audio component BEFORE any usage ===
 def apply_audio_patch():
     """Patch the Audio component's preprocess method to ensure all required attributes exist"""
@@ -3691,6 +3694,8 @@ def create_ui():
                 
                 **End-to-end voice AI solution powered by HPE Private Cloud AI**
                 
+                *Build: {BUILD_NUMBER}*
+
                 This application demonstrates a complete voice-based customer service agent capable of natural conversation, intent recognition, and real-time database operations.
                 
                 ---
@@ -5655,7 +5660,7 @@ def create_ui():
     return demo
 
 if __name__ == "__main__":
-    print("Starting Voice Agent v5.0.0 - Improved Language Support, Sentiment Analysis, Session Stability...")
+    print(f"Starting Voice Agent v5.0.0 (Build {BUILD_NUMBER}) - Improved Language Support, Sentiment Analysis, Session Stability...")
     demo = create_ui()
     demo.queue()
     demo.launch(server_name="0.0.0.0", server_port=8080, show_error=True)

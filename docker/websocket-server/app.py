@@ -52,6 +52,9 @@ except ImportError:
     logging.warning("asyncpg not installed. Database features disabled.")
     ASYNCPG_AVAILABLE = False
 
+# Build Metadata
+BUILD_NUMBER = "5.0.0.1001"
+
 # =============================================================================
 # GLOBAL CONNECTION POOLS (Performance improvement)
 # =============================================================================
@@ -4090,7 +4093,7 @@ async def graceful_shutdown():
 async def main():
     host, port = "0.0.0.0", 8765
     logging.info("=" * 60)
-    logging.info("Voice Agent WebSocket Server v5.0.0")
+    logging.info(f"Voice Agent WebSocket Server v5.0.0 (Build {BUILD_NUMBER})")
     logging.info("Natural Conversation + Smart Upgrade Flow")
     logging.info("Whisper ASR + XTTS v2 TTS")
     logging.info("=" * 60)
