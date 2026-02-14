@@ -52,6 +52,9 @@ except ImportError:
     logging.warning("asyncpg not installed. Database features disabled.")
     ASYNCPG_AVAILABLE = False
 
+# Build Metadata
+BUILD_NUMBER = "5.0.0.1001"
+
 # =============================================================================
 # GLOBAL CONNECTION POOLS (Performance improvement)
 # =============================================================================
@@ -189,9 +192,10 @@ async def get_db_pool(host, port, dbname, user, password) -> Any:
     async with _db_pool_lock:
         if _db_pool is None and ASYNCPG_AVAILABLE:
             try:
+                # Optimized pool size: min_size=2 ensures connection ready for first request
                 _db_pool = await asyncpg.create_pool(
-                    min_size=1,
-                    max_size=10,
+                    min_size=2,
+                    max_size=20,
                     host=host,
                     port=port,
                     database=dbname,
@@ -232,7 +236,7 @@ DEFAULT_SETTINGS = {
     "llm_prompt_template": os.getenv("LLM_PROMPT_TEMPLATE", 'Answer the question: "{transcript}"\n\nAnswer concisely.'),
     "llm_model_name": os.getenv("LLM_MODEL_NAME", "meta-llama/Llama-3.2-1B-Instruct"),
     # ASR - Whisper
-    "asr_server_address": os.getenv("ASR_SERVER_ADDRESS"),
+    "asr_server_address": os.getenv("ASR_SERVER_ADDRESS", "whisper-large-v3-predictor-00002-deployment.liav-hpe-com-ba9ce2f9.svc.cluster.local:9000"),
     "asr_language_code": os.getenv("ASR_LANGUAGE_CODE", "en"),
     # TTS - XTTS v2
     "tts_server_address": os.getenv("TTS_SERVER_ADDRESS", "localhost:8000"),
@@ -678,6 +682,15 @@ NATURAL_RESPONSES = {
         "goodbye": ["Take care! Don't hesitate to call if you need anything.", "Thanks for calling! Have a great day!"],
         "ticket_ask_details": ["Sure, I can open a ticket. Please describe the issue.", "I can help with that. What is the reason for the ticket?"],
         "ticket_created": ["I've opened ticket number {id} for you.", "Done. Ticket #{id} has been created."],
+        "ticket_close_success": ["Done. I've closed ticket number {id} about '{subject}'.", "I've closed your open ticket, number {id}, regarding '{subject}'."],
+        "ticket_close_latest": ["You have {count} open tickets. I've closed the most recent one, ticket {id}, about '{subject}'."],
+        "ticket_close_fail": ["I tried to close that ticket but ran into an issue.", "I ran into an issue updating your ticket."],
+        "ticket_close_not_found": ["I couldn't find an open ticket with number {id}. Want me to list your open tickets?", "No open ticket found with that number."],
+        "ticket_create_fail": ["I had a bit of trouble opening that ticket. You might want to try again later."],
+        "ticket_create_cancel": ["Okay, I won't open a ticket."],
+        "upgrade_not_found": ["I couldn't find a plan matching '{plan}'. We have Standard and Premium - which would you prefer?"],
+        "upgrade_unclear": ["Sorry, I didn't catch that. You want to upgrade to {plan}, right? Yes or no."],
+        "upgrade_error": ["I ran into a small issue. Can you confirm the upgrade again?"],
         "sub_active": ["You're on the {plan} plan, {name}. That's {price} dollars a month."],
         "sub_status": ["Your {plan} subscription is currently {status}."],
         "bal_overdue": ["Looks like you have {amount} dollars overdue, {name}. Want help sorting that?"],
@@ -707,6 +720,15 @@ NATURAL_RESPONSES = {
         "goodbye": ["¡Cuídate! Llama si necesitas algo.", "¡Gracias por llamar! Que tengas buen día."],
         "ticket_ask_details": ["Puedo abrir un ticket. Describe el problema, por favor.", "¿Cuál es la razón del ticket?"],
         "ticket_created": ["Abrí el ticket número {id} para ti.", "Listo. Ticket #{id} creado."],
+        "ticket_close_success": ["He cerrado el ticket número {id} sobre '{subject}'.", "Listo. Ticket {id} cerrado."],
+        "ticket_close_latest": ["Tienes {count} tickets abiertos. Cerré el más reciente, ticket {id}, sobre '{subject}'."],
+        "ticket_close_fail": ["Tuve un problema al cerrar ese ticket.", "Error al actualizar el ticket."],
+        "ticket_close_not_found": ["No encontré un ticket abierto con el número {id}.", "¿Quieres que liste tus tickets?"],
+        "ticket_create_fail": ["Tuve un problema al crear el ticket. Intenta más tarde."],
+        "ticket_create_cancel": ["Está bien, no abriré el ticket."],
+        "upgrade_not_found": ["No encontré el plan '{plan}'. Tenemos Standard y Premium."],
+        "upgrade_unclear": ["Perdón, no entendí. ¿Quieres cambiar a {plan}, verdad? ¿Sí o no?"],
+        "upgrade_error": ["Tuve un pequeño problema. ¿Puedes confirmar de nuevo?"],
         "sub_active": ["Estás en el plan {plan}, {name}. Son {price} dólares al mes."],
         "sub_status": ["Tu suscripción {plan} está actualmente {status}."],
         "bal_overdue": ["Tienes {amount} dólares vencidos, {name}. ¿Quieres ayuda con eso?"],
@@ -736,6 +758,15 @@ NATURAL_RESPONSES = {
         "goodbye": ["Au revoir! N'hésitez pas à rappeler.", "Bonne journée!"],
         "ticket_ask_details": ["Je peux ouvrir un ticket. Décrivez le problème.", "Quel est le souci pour le ticket?"],
         "ticket_created": ["J'ai ouvert le ticket numéro {id}.", "Ticket #{id} créé avec succès."],
+        "ticket_close_success": ["C'est fait. J'ai fermé le ticket numéro {id} concernant '{subject}'.", "Ticket {id} fermé."],
+        "ticket_close_latest": ["Vous avez {count} tickets ouverts. J'ai fermé le plus récent, ticket {id}."],
+        "ticket_close_fail": ["J'ai eu un problème pour fermer ce ticket."],
+        "ticket_close_not_found": ["Je n'ai pas trouvé de ticket ouvert avec le numéro {id}."],
+        "ticket_create_fail": ["J'ai eu un problème pour ouvrir ce ticket."],
+        "ticket_create_cancel": ["D'accord, je n'ouvre pas de ticket."],
+        "upgrade_not_found": ["Je n'ai pas trouvé de plan correspondant à '{plan}'."],
+        "upgrade_unclear": ["Désolé, je n'ai pas compris. Vous voulez passer à {plan}, c'est ça ?"],
+        "upgrade_error": ["J'ai rencontré un petit problème. Pouvez-vous confirmer ?"],
         "sub_active": ["Vous avez le plan {plan}, {name}. C'est {price} dollars par mois."],
         "sub_status": ["Votre abonnement {plan} est {status}."],
         "bal_overdue": ["Vous avez {amount} dollars en retard, {name}. Besoin d'aide?", "Attention, {amount} dollars impayés."],
@@ -765,6 +796,15 @@ NATURAL_RESPONSES = {
         "goodbye": ["Auf Wiederhören!", "Tschüss, rufen Sie gerne wieder an."],
         "ticket_ask_details": ["Ich öffne ein Ticket. Was ist das Problem?", "Bitte beschreiben Sie das Problem für das Ticket."],
         "ticket_created": ["Ticket Nummer {id} wurde erstellt.", "Erledigt. Ticket #{id} ist offen."],
+        "ticket_close_success": ["Erledigt. Ich habe Ticket Nummer {id} geschlossen.", "Ticket {id} ist jetzt geschlossen."],
+        "ticket_close_latest": ["Sie haben {count} offene Tickets. Ich habe das letzte Ticket {id} geschlossen."],
+        "ticket_close_fail": ["Ich hatte ein Problem beim Schließen des Tickets."],
+        "ticket_close_not_found": ["Ich konnte kein offenes Ticket mit der Nummer {id} finden."],
+        "ticket_create_fail": ["Ich hatte Probleme beim Erstellen des Tickets."],
+        "ticket_create_cancel": ["Okay, ich erstelle kein Ticket."],
+        "upgrade_not_found": ["Ich konnte keinen Plan namens '{plan}' finden."],
+        "upgrade_unclear": ["Entschuldigung, wollen Sie auf {plan} upgraden?"],
+        "upgrade_error": ["Ein kleines Problem ist aufgetreten. Bitte bestätigen Sie erneut."],
         "sub_active": ["Sie haben den {plan} Plan, {name}. {price} Dollar pro Monat.", "Ihr Plan ist {plan} für {price} Dollar."],
         "sub_status": ["Ihr {plan} Abo ist derzeit {status}."],
         "bal_overdue": ["Sie haben {amount} Dollar offen, {name}. Soll ich helfen?", "Achtung, {amount} Dollar überfällig."],
@@ -823,6 +863,15 @@ NATURAL_RESPONSES = {
         "goodbye": ["Arrivederci! Chiama quando vuoi.", "Buona giornata!"],
         "ticket_ask_details": ["Posso aprire un ticket. Descrivi il problema.", "Qual è il motivo della segnalazione?"],
         "ticket_created": ["Ho aperto il ticket numero {id}.", "Fatto. Ticket #{id} creato."],
+        "ticket_close_success": ["Fatto. Ho chiuso il ticket numero {id}.", "Ticket {id} chiuso."],
+        "ticket_close_latest": ["Hai {count} ticket aperti. Ho chiuso l'ultimo, il numero {id}."],
+        "ticket_close_fail": ["Ho avuto un problema nel chiudere il ticket."],
+        "ticket_close_not_found": ["Non ho trovato ticket aperti con numero {id}."],
+        "ticket_create_fail": ["Ho avuto problemi ad aprire il ticket."],
+        "ticket_create_cancel": ["Ok, non apro nessun ticket."],
+        "upgrade_not_found": ["Non ho trovato il piano '{plan}'."],
+        "upgrade_unclear": ["Scusa, vuoi passare al piano {plan}?"],
+        "upgrade_error": ["C'è stato un piccolo problema. Puoi confermare?"],
         "sub_active": ["Hai il piano {plan}, {name}. Costa {price} dollari al mese."],
         "sub_status": ["Il tuo abbonamento {plan} è {status}."],
         "bal_overdue": ["Hai {amount} dollari scaduti, {name}. Vuoi aiuto?", "Attenzione, {amount} dollari non pagati."],
@@ -852,6 +901,15 @@ NATURAL_RESPONSES = {
         "goodbye": ["Até logo! Ligue se precisar.", "Tchau, tenha um bom dia!"],
         "ticket_ask_details": ["Posso abrir um chamado. Qual é o problema?", "Descreva o problema para o ticket."],
         "ticket_created": ["Abri o ticket número {id}.", "Feito. Chamado #{id} criado."],
+        "ticket_close_success": ["Pronto. Fechei o ticket número {id}.", "Ticket {id} encerrado."],
+        "ticket_close_latest": ["Você tem {count} tickets abertos. Fechei o mais recente, número {id}."],
+        "ticket_close_fail": ["Tive um problema ao fechar o ticket."],
+        "ticket_close_not_found": ["Não encontrei ticket aberto com número {id}."],
+        "ticket_create_fail": ["Tive problemas ao criar o ticket."],
+        "ticket_create_cancel": ["Ok, não vou abrir o ticket."],
+        "upgrade_not_found": ["Não encontrei o plano '{plan}'."],
+        "upgrade_unclear": ["Desculpe, você quer mudar para {plan}?"],
+        "upgrade_error": ["Tive um pequeno problema. Pode confirmar de novo?"],
         "sub_active": ["Seu plano é {plan}, {name}. Custa {price} dólares por mês."],
         "sub_status": ["Sua assinatura {plan} está {status}."],
         "bal_overdue": ["Você tem {amount} dólares vencidos, {name}. Quer ajuda?", "Atenção, {amount} em atraso."],
@@ -881,6 +939,15 @@ NATURAL_RESPONSES = {
         "goodbye": ["До свидания! Звоните, если что.", "Всего доброго!"],
         "ticket_ask_details": ["Я создам тикет. Опишите проблему.", "Какая причина обращения?"],
         "ticket_created": ["Создан тикет номер {id}.", "Готово. Заявка #{id} открыта."],
+        "ticket_close_success": ["Готово. Тикет {id} закрыт.", "Заявка {id} успешно закрыта."],
+        "ticket_close_latest": ["У вас {count} открытых заявок. Я закрыл последнюю, номер {id}."],
+        "ticket_close_fail": ["Не удалось закрыть тикет."],
+        "ticket_close_not_found": ["Не нашел открытого тикета с номером {id}."],
+        "ticket_create_fail": ["Не удалось создать тикет."],
+        "ticket_create_cancel": ["Хорошо, не буду создавать тикет."],
+        "upgrade_not_found": ["Не нашел план '{plan}'."],
+        "upgrade_unclear": ["Извините, вы хотите перейти на {plan}?"],
+        "upgrade_error": ["Возникла ошибка. Подтвердите еще раз."],
         "sub_active": ["У вас план {plan}, {name}. {price} долларов в месяц."],
         "sub_status": ["Ваша подписка {plan} сейчас {status}."],
         "bal_overdue": ["У вас долг {amount} долларов, {name}. Помочь?", "Просрочено {amount} долларов."],
@@ -910,6 +977,15 @@ NATURAL_RESPONSES = {
         "goodbye": ["مع السلامة! اتصل في أي وقت.", "يومك سعيد!"],
         "ticket_ask_details": ["سأفتح تذكرة دعم. ما هي المشكلة؟", "صف لي المشكلة لفتح التذكرة."],
         "ticket_created": ["فتحت التذكرة رقم {id}.", "تم إنشاء التذكرة #{id}."],
+        "ticket_close_success": ["تم. أغلقت التذكرة رقم {id}.", "التذكرة {id} مغلقة الآن."],
+        "ticket_close_latest": ["لديك {count} تذاكر مفتوحة. أغلقت الأحدث، رقم {id}."],
+        "ticket_close_fail": ["واجهت مشكلة في إغلاق التذكرة."],
+        "ticket_close_not_found": ["لم أجد تذكرة مفتوحة برقم {id}."],
+        "ticket_create_fail": ["واجهت مشكلة في إنشاء التذكرة."],
+        "ticket_create_cancel": ["حسناً، لن أفتح تذكرة."],
+        "upgrade_not_found": ["لم أجد خطة باسم '{plan}'."],
+        "upgrade_unclear": ["عفواً، هل تريد الترقية إلى {plan}؟"],
+        "upgrade_error": ["حدث خطأ بسيط. هل تؤكد الطلب؟"],
         "sub_active": ["أنت على خطة {plan} يا {name}. {price} دولار شهرياً.", "باقتك {plan} بسعر {price}."],
         "sub_status": ["اشتراكك في {plan} حالياً {status}."],
         "bal_overdue": ["لديك {amount} دولار متأخرة يا {name}. هل أساعدك؟", "تنبيه، عليك {amount} دولار."],
@@ -939,6 +1015,15 @@ NATURAL_RESPONSES = {
         "goodbye": ["再见！有需要请随时致电。", "祝您愉快！"],
         "ticket_ask_details": ["我可以为您开工单。请描述问题。", "工单原因是什么？"],
         "ticket_created": ["已为您创建工单号 {id}。", "完成。工单 #{id} 已建立。"],
+        "ticket_close_success": ["完成。工单 {id} 已关闭。", "已解决工单 {id}。"],
+        "ticket_close_latest": ["您有 {count} 个未结工单。已关闭最新的工单 {id}。"],
+        "ticket_close_fail": ["关闭工单时遇到问题。"],
+        "ticket_close_not_found": ["找不到编号为 {id} 的未结工单。"],
+        "ticket_create_fail": ["创建工单时遇到问题。"],
+        "ticket_create_cancel": ["好的，不创建工单。"],
+        "upgrade_not_found": ["找不到计划 '{plan}'。"],
+        "upgrade_unclear": ["抱歉，您是要升级到 {plan} 吗？"],
+        "upgrade_error": ["出了一点小问题，请再次确认。"],
         "sub_active": ["您的计划是 {plan}，{name}。每月 {price} 美元。", "您正在使用 {plan}。"],
         "sub_status": ["您的 {plan} 订阅当前状态为 {status}。"],
         "bal_overdue": ["您有 {amount} 美元逾期，{name}。需要帮忙吗？", "注意，{amount} 欠款。"],
@@ -968,6 +1053,15 @@ NATURAL_RESPONSES = {
         "goodbye": ["失礼いたします！またお電話ください。", "ありがとうございました！"],
         "ticket_ask_details": ["チケットを作成します。どのような問題ですか？", "チケットの理由を教えてください。"],
         "ticket_created": ["チケット番号{id}を作成しました。", "完了です。チケット#{id}を発行しました。"],
+        "ticket_close_success": ["完了しました。チケット{id}をクローズしました。", "チケット{id}は解決済みです。"],
+        "ticket_close_latest": ["未解決のチケットが{count}件あります。最新のチケット{id}をクローズしました。"],
+        "ticket_close_fail": ["チケットのクローズ中に問題が発生しました。"],
+        "ticket_close_not_found": ["番号{id}の未解決チケットが見つかりませんでした。"],
+        "ticket_create_fail": ["チケットの作成中に問題が発生しました。"],
+        "ticket_create_cancel": ["承知しました。チケットは作成しません。"],
+        "upgrade_not_found": ["プラン '{plan}' が見つかりませんでした。"],
+        "upgrade_unclear": ["すみません、{plan}へアップグレードしますか？"],
+        "upgrade_error": ["問題が発生しました。もう一度確認していただけますか？"],
         "sub_active": ["現在のプランは{plan}です、{name}さん。月額{price}ドルです。", "{plan}をご利用中です。"],
         "sub_status": ["{plan}のステータスは現在{status}です。"],
         "bal_overdue": ["{amount}ドルの未払いがあります、{name}さん。確認しますか？", "注意：{amount}ドルの滞納があります。"],
@@ -997,6 +1091,15 @@ NATURAL_RESPONSES = {
         "goodbye": ["안녕히 계세요! 필요하면 다시 전화 주세요.", "감사합니다. 좋은 하루 되세요!"],
         "ticket_ask_details": ["티켓을 생성해 드리겠습니다. 어떤 문제가 있나요?", "티켓 사유를 말씀해 주세요."],
         "ticket_created": ["티켓 번호 {id}번이 생성되었습니다.", "완료. 티켓 #{id} 접수됨."],
+        "ticket_close_success": ["완료되었습니다. 티켓 {id}번을 닫았습니다.", "티켓 {id}번이 해결되었습니다."],
+        "ticket_close_latest": ["{count}개의 열린 티켓이 있습니다. 가장 최근 티켓 {id}번을 닫았습니다."],
+        "ticket_close_fail": ["티켓을 닫는 중 문제가 발생했습니다."],
+        "ticket_close_not_found": ["번호 {id}번의 열린 티켓을 찾을 수 없습니다."],
+        "ticket_create_fail": ["티켓 생성 중 문제가 발생했습니다."],
+        "ticket_create_cancel": ["알겠습니다. 티켓을 생성하지 않습니다."],
+        "upgrade_not_found": ["'{plan}' 플랜을 찾을 수 없습니다."],
+        "upgrade_unclear": ["죄송합니다. {plan}으로 업그레이드하시겠습니까?"],
+        "upgrade_error": ["문제가 발생했습니다. 다시 확인해 주시겠습니까?"],
         "sub_active": ["현재 {plan} 플랜을 이용 중이십니다, {name}님. 월 {price} 달러입니다.", "{plan} 요금제 사용 중."],
         "sub_status": ["{plan} 구독 상태는 현재 {status}입니다."],
         "bal_overdue": ["{amount} 달러의 연체금이 있습니다, {name}님. 도와드릴까요?", "주의: {amount} 달러 미납."],
@@ -1949,7 +2052,19 @@ class DatabaseManager:
                 await connection.execute(query, session_id, customer_id, json.dumps(data))
                 return True
         except Exception as e:
-            logging.error(f"[DB] Failed to save session: {e}")
+            # Self-healing: If table missing, create it and retry
+            if "relation \"conversation_sessions\" does not exist" in str(e):
+                logging.warning("[DB] Session table missing, attempting to create...")
+                await self._initialize_session_storage_table()
+                try:
+                    async with self.pool.acquire() as connection:
+                        await connection.execute(query, session_id, customer_id, json.dumps(data))
+                    logging.info("[DB] Session saved after table creation")
+                    return True
+                except Exception as e2:
+                    logging.error(f"[DB] Failed to save session after retry: {e2}")
+            else:
+                logging.error(f"[DB] Failed to save session: {e}")
             return False
 
     async def load_session(self, session_id):
@@ -2293,6 +2408,34 @@ DB_TERM_TRANSLATIONS = {
         'open': 'aberto', 'resolved': 'resolvido', 'closed': 'fechado', 'in_progress': 'em andamento',
         'low': 'baixa', 'medium': 'média', 'high': 'alta', 'urgent': 'urgente',
         'email': 'email', 'phone': 'telefone', 'priority': 'prioridade'
+    },
+    'he': {
+        'active': 'פעיל', 'suspended': 'מושהה', 'cancelled': 'מבוטל',
+        'pending': 'ממתין', 'paid': 'שולם', 'overdue': 'בפיגור',
+        'open': 'פתוח', 'resolved': 'נפתר', 'closed': 'סגור', 'in_progress': 'בטיפול',
+        'low': 'נמוכה', 'medium': 'בינונית', 'high': 'גבוהה', 'urgent': 'דחופה',
+        'email': 'אימייל', 'phone': 'טלפון', 'priority': 'עדיפות'
+    },
+    'ar': {
+        'active': 'نشط', 'suspended': 'معلق', 'cancelled': 'ملغى',
+        'pending': 'قيد الانتظار', 'paid': 'مدفوع', 'overdue': 'متأخر',
+        'open': 'مفتوح', 'resolved': 'تم حله', 'closed': 'مغلق', 'in_progress': 'قيد التنفيذ',
+        'low': 'منخفضة', 'medium': 'متوسطة', 'high': 'عالية', 'urgent': 'عاجلة',
+        'email': 'البريد الإلكتروني', 'phone': 'الهاتف', 'priority': 'الأولوية'
+    },
+    'ru': {
+        'active': 'активен', 'suspended': 'приостановлен', 'cancelled': 'отменен',
+        'pending': 'ожидает', 'paid': 'оплачен', 'overdue': 'просрочен',
+        'open': 'открыт', 'resolved': 'решен', 'closed': 'закрыт', 'in_progress': 'в процессе',
+        'low': 'низкий', 'medium': 'средний', 'high': 'высокий', 'urgent': 'срочный',
+        'email': 'email', 'phone': 'телефон', 'priority': 'приоритет'
+    },
+    'tr': {
+        'active': 'aktif', 'suspended': 'askıya alındı', 'cancelled': 'iptal edildi',
+        'pending': 'beklemede', 'paid': 'ödendi', 'overdue': 'gecikmiş',
+        'open': 'açık', 'resolved': 'çözüldü', 'closed': 'kapalı', 'in_progress': 'devam ediyor',
+        'low': 'düşük', 'medium': 'orta', 'high': 'yüksek', 'urgent': 'acil',
+        'email': 'eposta', 'phone': 'telefon', 'priority': 'öncelik'
     },
 }
 
@@ -3232,12 +3375,12 @@ async def main_pipeline(websocket, audio_bytes: bytes, settings: dict, session_i
                         conversation.set_pending_upgrade(plan['name'], plan.get('id'))
                         response_text = get_natural_response('upgrade_confirm', lang=response_lang, plan=plan['name'])
                     else:
-                        response_text = f"I couldn't find a plan matching '{plan_choice}'. We have Standard and Premium - which would you prefer?"
+                        response_text = get_natural_response('upgrade_not_found', lang=response_lang, plan=plan_choice)
                 elif is_cancellation(final_transcript):
                     conversation.cancel_upgrade()
                     response_text = get_natural_response('upgrade_cancelled', lang=response_lang)
                 else:
-                    response_text = "Just to clarify - are you looking at Standard or Premium?"
+                    response_text = get_natural_response('upgrade_ask_plan', lang=response_lang)
             
             # STATE: Upgrade - Awaiting Confirmation
             elif conversation.state == ConversationState.STATE_UPGRADE_CONFIRM:
@@ -3265,7 +3408,7 @@ async def main_pipeline(websocket, audio_bytes: bytes, settings: dict, session_i
                     
                     if error:
                         logging.error(f"[Upgrade] Failed to create request: {error}")
-                        response_text = "I ran into a small issue. Can you confirm the upgrade again?"
+                        response_text = get_natural_response('upgrade_error', lang=response_lang)
                     else:
                         completed_plan = conversation.complete_upgrade()
                         response_text = get_natural_response('upgrade_submitted', lang=response_lang, plan=completed_plan)
@@ -3276,7 +3419,7 @@ async def main_pipeline(websocket, audio_bytes: bytes, settings: dict, session_i
                     response_text = get_natural_response('upgrade_cancelled', lang=response_lang)
                 else:
                     # Unclear response - ask again
-                    response_text = f"Sorry, I didn't catch that. You want to upgrade to {conversation.pending_upgrade_plan}, right? Yes or no."
+                    response_text = get_natural_response('upgrade_unclear', lang=response_lang, plan=conversation.pending_upgrade_plan)
             
             # STATE: Create Ticket - Awaiting Details
             elif conversation.state == ConversationState.STATE_CREATE_TICKET:
@@ -3284,7 +3427,7 @@ async def main_pipeline(websocket, audio_bytes: bytes, settings: dict, session_i
                 
                 if is_cancellation(final_transcript):
                     conversation.state = ConversationState.STATE_IDENTIFIED
-                    response_text = "Okay, I won't open a ticket."
+                    response_text = get_natural_response('ticket_create_cancel', lang=response_lang)
                     logging.info("[Ticket] Creation cancelled by user")
                 else:
                     # Use transcript as subject (reason) as requested by user
@@ -3313,7 +3456,7 @@ async def main_pipeline(websocket, audio_bytes: bytes, settings: dict, session_i
                             
                     else:
                         logging.error(f"[Ticket] Creation failed: {error}")
-                        response_text = "I had a bit of trouble opening that ticket. You might want to try again later."
+                        response_text = get_natural_response('ticket_create_fail', lang=response_lang)
                     
                     # Reset state
                     conversation.state = ConversationState.STATE_IDENTIFIED
@@ -3452,24 +3595,24 @@ async def main_pipeline(websocket, audio_bytes: bytes, settings: dict, session_i
                         result, error = await db_manager.close_ticket_by_id(conversation.customer_id, ticket_number)
                         if result:
                             t_id, subject = result
-                            response_text = f"Done. I've closed ticket number {t_id} about '{subject}'."
+                            response_text = get_natural_response('ticket_close_success', lang=response_lang, id=t_id, subject=subject)
                         else:
-                            response_text = f"I couldn't find an open ticket with number {ticket_number}. Want me to list your open tickets?"
+                            response_text = get_natural_response('ticket_close_not_found', lang=response_lang, id=ticket_number)
                     else:
                         # Logic: Fetch open tickets first
                         open_tickets, error = await db_manager.get_open_tickets(conversation.customer_id)
                         
                         if not open_tickets:
-                            response_text = "I checked, but you don't have any open support tickets right now."
+                            response_text = get_natural_response('ticket_resolved', lang=response_lang, count=0)
                         elif len(open_tickets) == 1:
                             # Single ticket - close it
                             t_id = open_tickets[0]['id']
                             subject = open_tickets[0]['subject']
                             result, error = await db_manager.close_ticket_by_id(conversation.customer_id, t_id)
                             if result:
-                                response_text = f"I've closed your open ticket, number {t_id}, regarding '{subject}'."
+                                response_text = get_natural_response('ticket_close_success', lang=response_lang, id=t_id, subject=subject)
                             else:
-                                response_text = "I tried to close that ticket but ran into an issue."
+                                response_text = get_natural_response('ticket_close_fail', lang=response_lang)
                         else:
                             # Multiple tickets - close latest but inform user
                             latest = open_tickets[0]
@@ -3479,9 +3622,9 @@ async def main_pipeline(websocket, audio_bytes: bytes, settings: dict, session_i
                             
                             result, error = await db_manager.close_ticket_by_id(conversation.customer_id, t_id)
                             if result:
-                                response_text = f"You have {count} open tickets. I've closed the most recent one, ticket {t_id}, about '{subject}'."
+                                response_text = get_natural_response('ticket_close_latest', lang=response_lang, count=count, id=t_id, subject=subject)
                             else:
-                                response_text = "I ran into an issue updating your ticket."
+                                response_text = get_natural_response('ticket_close_fail', lang=response_lang)
 
                 elif query_type:
                     logging.info(f"[Query] Detected type: {query_type}")
@@ -3950,7 +4093,7 @@ async def graceful_shutdown():
 async def main():
     host, port = "0.0.0.0", 8765
     logging.info("=" * 60)
-    logging.info("Voice Agent WebSocket Server v5.0.0")
+    logging.info(f"Voice Agent WebSocket Server v5.0.0 (Build {BUILD_NUMBER})")
     logging.info("Natural Conversation + Smart Upgrade Flow")
     logging.info("Whisper ASR + XTTS v2 TTS")
     logging.info("=" * 60)

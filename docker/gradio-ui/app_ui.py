@@ -36,6 +36,9 @@ def db_connection(host, port, dbname, user, password):
 # Suppress pandas SQLAlchemy warning (we use psycopg2 directly, which works fine)
 warnings.filterwarnings('ignore', message='.*pandas only supports SQLAlchemy.*')
 
+# Build Metadata
+BUILD_NUMBER = "5.0.0.1001"
+
 # === CRITICAL FIX: Patch Audio component BEFORE any usage ===
 def apply_audio_patch():
     """Patch the Audio component's preprocess method to ensure all required attributes exist"""
@@ -529,6 +532,7 @@ def get_extended_customer_info(db_conn, customer_id: int) -> dict:
 # =====================================================
 INIT_TABLES_SQL = """
 -- Drop tables if exist (only these specific tables)
+DROP TABLE IF EXISTS conversation_sessions CASCADE;
 DROP TABLE IF EXISTS sentiment_alerts CASCADE;
 DROP TABLE IF EXISTS upgrade_requests CASCADE;
 DROP TABLE IF EXISTS support_tickets CASCADE;
@@ -638,6 +642,14 @@ CREATE TABLE sentiment_alerts (
     resolved_at TIMESTAMP,
     resolved_by VARCHAR(255),
     resolution_notes TEXT
+);
+
+-- Conversation sessions table (for persistence)
+CREATE TABLE conversation_sessions (
+    session_id VARCHAR(255) PRIMARY KEY,
+    customer_id INTEGER,
+    data JSONB,
+    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 """
 
@@ -2016,7 +2028,7 @@ DEFAULT_CONFIG = {
     "llm_api_key": os.getenv("LLM_API_KEY", ""),
     "llm_model_name": os.getenv("LLM_MODEL_NAME", "meta-llama/Llama-3.2-1B-Instruct"),
     "llm_prompt_template": os.getenv("LLM_PROMPT_TEMPLATE", 'Answer the question: "{transcript}"\n\nAnswer concisely.'),
-    "asr_server_address": os.getenv("ASR_SERVER_ADDRESS", "localhost:50051"),
+    "asr_server_address": os.getenv("ASR_SERVER_ADDRESS", "whisper-large-v3-predictor-00002-deployment.liav-hpe-com-ba9ce2f9.svc.cluster.local:9000"),
     "asr_language_code": "en-US",  # Input is always English (Whisper)
     "tts_server_address": os.getenv("TTS_SERVER_ADDRESS", "localhost:8000"),
     "tts_language_code": os.getenv("TTS_LANGUAGE_CODE", "en"),  # XTTS language code
@@ -2570,16 +2582,22 @@ async def process_audio(
                 # Strip WAV header if present (server might send WAV per sentence)
                 raw_pcm = strip_wav_header(data)
                 audio_buffer.extend(raw_pcm)
-                status_log += f"🎵 Chunk {total_audio_chunks}: {len(raw_pcm):,} bytes | Total: {len(audio_buffer):,}\n"
                 
-                # Throttling: Only yield every 20 chunks to prevent overwhelming the Gradio stream
-                # This fixes 'LocalProtocolError: Too little data for declared Content-Length'
-                if total_audio_chunks % 20 == 0:
+                # IMPORTANT: Immediate playback trigger logic
+                # For very short responses (1 chunk), waiting can cause perceived silence.
+                # However, Gradio streaming needs throttling.
+                # Optimization: Update log less frequently, but ensure data is collected.
+
+                if total_audio_chunks % 10 == 0:
+                    status_log += f"🎵 Receiving audio... ({total_audio_chunks} chunks)\n"
                     yield gr.update(), status_log, gr.update(), gr.update(), gr.update(value=last_perf_html, visible=True), gr.update()
         
+        # Audio generation completed
         if len(audio_buffer) == 0:
-            status_log += "\n❌ ERROR: No audio received (buffer empty).\n"
-            status_log += f"📊 Chunks received: {total_audio_chunks}\n"
+            # Check if this was an error case (usually signaled by status update earlier)
+            if "Error" not in status_log:
+                status_log += "\n⚠️ Warning: Response generated but no audio content received.\n"
+
             print(f"[UI_DEBUG] Session {session_id[:8]} - Empty buffer")
             yield gr.update(), status_log, gr.update(), gr.update(), gr.update(value=last_perf_html, visible=True), gr.update()
             return
@@ -3676,6 +3694,8 @@ def create_ui():
                 
                 **End-to-end voice AI solution powered by HPE Private Cloud AI**
                 
+                *Build: {BUILD_NUMBER}*
+
                 This application demonstrates a complete voice-based customer service agent capable of natural conversation, intent recognition, and real-time database operations.
                 
                 ---
@@ -5182,9 +5202,28 @@ def create_ui():
                     }, 500);
                 });
                 
+                // Retry logic for audio errors
+                let retryCount = 0;
+
                 audioPlayer.addEventListener('error', (e) => {
                     console.error('[Audio] Error:', e);
-                    if (audioStatus) audioStatus.textContent = '❌ Audio error';
+                    if (audioStatus) audioStatus.textContent = '❌ Audio error (Retrying...)';
+
+                    // Attempt retry twice
+                    if (retryCount < 2 && audioPlayer.src) {
+                        retryCount++;
+                        console.log('[Audio] Retrying playback (' + retryCount + '/2)...');
+                        // Add cache buster
+                        const cleanSrc = audioPlayer.src.split('&retry=')[0];
+                        const separator = cleanSrc.includes('?') ? '&' : '?';
+                        audioPlayer.src = cleanSrc + separator + 'retry=' + Date.now();
+                        setTimeout(() => {
+                            audioPlayer.load();
+                            audioPlayer.play().catch(err => console.error('Retry play failed', err));
+                        }, 500);
+                    } else {
+                        if (audioStatus) audioStatus.textContent = '❌ Audio error (Failed)';
+                    }
                 });
                 
                 // Find the hidden textbox with audio data
@@ -5203,6 +5242,7 @@ def create_ui():
                         // Compare with the raw value from the textbox to detect changes
                         if (audioPlayer.dataset.lastRawValue !== holder.value) {
                             console.log('[Audio] New audio input detected:', holder.value);
+                            retryCount = 0; // Reset retry count for new file
                             
                             // Add timestamp to prevent browser caching
                             const uniqueUrl = audioUrl + (audioUrl.includes('?') ? '&' : '?') + 't=' + Date.now();
@@ -5226,13 +5266,13 @@ def create_ui():
                                         if (audioStatus) audioStatus.textContent = '⚠️ Click to play (Autoplay blocked)';
                                     });
                                 }
-                            }, 50);
+                            }, 100);
                         }
                     }
                 };
                 
-                // Check periodically for new audio
-                setInterval(checkForAudioData, 500);
+                // Check periodically for new audio (faster polling)
+                setInterval(checkForAudioData, 250);
                 
                 // Also observe for changes
                 const observer = new MutationObserver((mutations) => {
@@ -5620,7 +5660,7 @@ def create_ui():
     return demo
 
 if __name__ == "__main__":
-    print("Starting Voice Agent v5.0.0 - Improved Language Support, Sentiment Analysis, Session Stability...")
+    print(f"Starting Voice Agent v5.0.0 (Build {BUILD_NUMBER}) - Improved Language Support, Sentiment Analysis, Session Stability...")
     demo = create_ui()
     demo.queue()
     demo.launch(server_name="0.0.0.0", server_port=8080, show_error=True)
