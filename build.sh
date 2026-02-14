@@ -5,7 +5,7 @@
 set -e
 
 REGISTRY="${REGISTRY:-liavna}"
-TAG="${VERSION:-latest}"
+TAG="${VERSION:-5.0.0}"
 
 # Colors
 RED='\033[0;31m'
